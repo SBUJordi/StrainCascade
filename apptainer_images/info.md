@@ -1,7 +1,4 @@
-
-### apptainer_images/info.md
-
-# Apptainer Images Directory
+# Apptainer images directory
 
 ## Overview
 This directory stores the Apptainer (formerly Singularity) images pulled from Docker. These images contain the necessary software and dependencies to run the pipeline.
