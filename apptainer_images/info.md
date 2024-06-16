@@ -1,7 +1,6 @@
 
 ### apptainer_images/info.md
 
-```markdown
 # Apptainer Images Directory
 
 ## Overview
