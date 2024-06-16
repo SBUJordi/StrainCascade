@@ -7,4 +7,7 @@ This is a modular bioinformatics pipeline designed to process genomic data. It u
 1. Clone the repository:
    ```bash
    git clone https://github.com/SBUJordi/StrainCascade.git
+
    cd StrainCascade
+
+   ./install.sh
