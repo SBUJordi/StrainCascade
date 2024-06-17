@@ -12,5 +12,8 @@ This is a modular bioinformatics pipeline designed to process genomic data. It u
    # Change to the StrainCascade directory
    cd StrainCascade
 
+   # Make the installation script executable
+   chmod +x StrainCascade_installation.sh
+   
    # Execute the installation script (downloads databases & pulls docker images)
-   ./install.sh
+   ./StrainCascade_installation.sh
