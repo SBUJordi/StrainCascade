@@ -3,6 +3,10 @@
 ## Overview
 This is a modular bioinformatics pipeline designed to process genomic data. It uses shell scripts and Docker images managed with Apptainer.
 
+## Dependencies
+- git
+- apptainer
+
 ## Installation
 1. Clone the repository:
    ```bash
