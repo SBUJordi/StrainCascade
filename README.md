@@ -3,6 +3,10 @@
 ## Overview
 This is a modular bioinformatics pipeline designed to process genomic data. It uses shell scripts and Docker images managed with Apptainer.
 
+## Dependencies
+- git
+- apptainer
+
 ## Installation
 1. Clone the repository:
    ```bash
@@ -13,7 +17,7 @@ This is a modular bioinformatics pipeline designed to process genomic data. It u
    cd StrainCascade
 
    # Make the installation script executable
-   chmod +x StrainCascade_installation.sh
+   chmod +x scripts/*
    
    # Execute the installation script (downloads databases & pulls docker images)
-   ./StrainCascade_installation.sh
+   ./scripts/StrainCascade_installation.sh
