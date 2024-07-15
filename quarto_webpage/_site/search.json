@@ -1,0 +1,44 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "StrainCascade",
+    "section": "",
+    "text": "This is a Quarto website.\nTo learn more about Quarto websites visit https://quarto.org/docs/websites.\n\n1 + 1\n\n[1] 2"
+  },
+  {
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "About",
+    "section": "",
+    "text": "About this site\n\n1 + 1\n\n[1] 2"
+  },
+  {
+    "objectID": "installation.html",
+    "href": "installation.html",
+    "title": "Installation",
+    "section": "",
+    "text": "git\nApptainer"
+  },
+  {
+    "objectID": "overview.html",
+    "href": "overview.html",
+    "title": "StrainCascade",
+    "section": "",
+    "text": "This is a Quarto website.\nTo learn more about Quarto websites visit https://quarto.org/docs/websites.\n\n1 + 1\n\n[1] 2"
+  },
+  {
+    "objectID": "installation.html#dependencies",
+    "href": "installation.html#dependencies",
+    "title": "Installation",
+    "section": "",
+    "text": "git\nApptainer"
+  },
+  {
+    "objectID": "installation.html#installation",
+    "href": "installation.html#installation",
+    "title": "Installation",
+    "section": "Installation",
+    "text": "Installation\nClone the StrainCascade GitHub repository\ngit clone https://github.com/SBUJordi/StrainCascade.git\nMove the working directory to the StrainCascade directory\ncd StrainCascade\nMake the StrainCascade scripts executable\nchmod +x scripts/*\nExecute the installation script (pulls Apptainer images and downloads databases)\n./scripts/StrainCascade_installation.sh"
+  }
+]
