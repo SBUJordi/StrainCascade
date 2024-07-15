@@ -1,0 +1,35 @@
+---
+title: "Installation"
+---
+
+## Dependencies
+
+-   git
+
+-   Apptainer
+
+## Installation
+
+Clone the StrainCascade GitHub repository
+
+``` bash
+git clone https://github.com/SBUJordi/StrainCascade.git
+```
+
+Move the working directory to the StrainCascade directory
+
+``` bash
+cd StrainCascade
+```
+
+Make the StrainCascade scripts executable
+
+``` bash
+chmod +x scripts/*
+```
+
+Execute the installation script (pulls Apptainer images and downloads databases)
+
+``` bash
+./scripts/StrainCascade_installation.sh
+```

@@ -1,0 +1,19 @@
+project:
+  type: website
+
+website:
+  title: "StrainCascade"
+  navbar:
+    left:
+      - href: overview.qmd
+        text: Overview
+      - installation.qmd
+
+format:
+  html:
+    theme: flatly
+    css: styles.css
+    toc: true
+
+editor: visual
+
