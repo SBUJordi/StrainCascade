@@ -31,10 +31,14 @@ jobs:
 
       - name: Render Quarto Project
         uses: quarto-dev/quarto-actions/render@v2
+        with:
+          path: quarto_webpage  # Specify the Quarto project directory
 
       - name: Publish to GitHub Pages
         uses: quarto-dev/quarto-actions/publish@v2
         with:
+          path: quarto_webpage/_site  # Specify the path to the built site
           target: gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
