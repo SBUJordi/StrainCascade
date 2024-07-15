@@ -22,20 +22,21 @@ jobs:
         uses: r-lib/actions/setup-r@v2
 
       - name: Install R and Quarto Dependencies
+        working-directory: quarto_webpage
         run: |
-          cd quarto_webpage
           Rscript -e 'install.packages(c("renv", "knitr", "rmarkdown"))'
           Rscript -e 'renv::restore()'  # Ensure renv restores the environment
 
       - name: Render Quarto Project
+        working-directory: quarto_webpage
         run: |
-          cd quarto_webpage
           quarto render .  # Render the Quarto project
 
       - name: Publish to GitHub Pages
+        working-directory: quarto_webpage/_site
         uses: quarto-dev/quarto-actions/publish@v2
         with:
-          path: quarto_webpage/_site  # Specify the path to the built site
+          path: .  # Specify the path to the built site
           target: gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
