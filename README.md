@@ -1,13 +1,14 @@
 # StrainCascade
 
 ## Overview
-StrainCascade is a modular bioinformatics pipeline designed to process genomic data. For further information visit the [StrainCascade documentation page](https://sbujordi.github.io/StrainCascade/). 
+StrainCascade is a modular bioinformatics pipeline designed to process genomic data of bacterial isolates. For further information visit the [StrainCascade documentation page](https://sbujordi.github.io/StrainCascade/). 
+Below you will find the minimum necessary installation information in case you already know your way around and do not need any further information. 
 
-## Dependencies
+## Installation dependencies
 - git
 - apptainer
 
-## Installation
+## Installation steps
 1. Clone the repository:
    ```bash
    # Clone the git repository
