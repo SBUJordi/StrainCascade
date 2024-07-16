@@ -1,7 +1,7 @@
 # StrainCascade
 
 ## Overview
-This is a modular bioinformatics pipeline designed to process genomic data. It uses shell scripts and Docker images managed with Apptainer.
+StrainCascade is a modular bioinformatics pipeline designed to process genomic data. For further information visit the [StrainCascade documentation page](https://sbujordi.github.io/StrainCascade/). 
 
 ## Dependencies
 - git
