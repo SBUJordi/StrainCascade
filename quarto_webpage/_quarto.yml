@@ -5,15 +5,39 @@ website:
   title: "StrainCascade"
   navbar:
     left:
-      - href: overview.qmd
+      - href: index.qmd
         text: Overview
-      - installation.qmd
+        icon: house-fill
+      - href: installation.qmd
+        text: Installation
+      - href: tutorial.qmd
+        text: Tutorial
+      - href: documentation.qmd
+        text: Documentation
+      - href: dependencies.qmd
+        text: Dependencies
+      - href: publications.qmd
+        text: Publications
+      - href: license.qmd
+        text: License
+  page-footer: 
+    right: 
+      - "Page not found? [Go home](index.qmd)"
+  page-navigation: true
 
 format:
   html:
     theme: flatly
-    css: styles.css
+    css: 
+      - styles.css
+      - custom.css
     toc: true
+    toc-depth: 3
+    toc-title: Contents
+    number-sections: true
+    highlight-style: github
+    code-fold: true
+    code-tools: false
+    mainfont: Helvetica
 
 editor: visual
-
