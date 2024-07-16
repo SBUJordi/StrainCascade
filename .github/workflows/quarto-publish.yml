@@ -33,11 +33,9 @@ jobs:
           quarto render .  # Render the Quarto project
 
       - name: Publish to GitHub Pages
-        working-directory: quarto_webpage/_site
         uses: quarto-dev/quarto-actions/publish@v2
         with:
-          path: .  # Specify the path to the built site
+          path: ./quarto_webpage/_site  # Specify the path to the built site
           target: gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
