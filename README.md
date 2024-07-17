@@ -9,7 +9,6 @@ Below you will find the minimum necessary installation information in case you a
 - apptainer
 
 ## Installation steps
-1. Clone the repository:
    ```bash
    # Clone the git repository
    git clone https://github.com/SBUJordi/StrainCascade.git
