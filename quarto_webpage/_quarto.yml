@@ -20,9 +20,7 @@ website:
         text: Publications
       - href: license.qmd
         text: License
-  page-footer: 
-    right: 
-      - "Page not found? [Go home](index.qmd)"
+        
   page-navigation: true
 
 format:
