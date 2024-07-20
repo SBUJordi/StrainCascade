@@ -2,11 +2,29 @@
 title: "Installation"
 ---
 
-## Dependencies
+## System requirements
 
--   git
+-   Linux OS (e.g., CentOS, Ubuntu, Debian, etc.)
 
--   Apptainer
+-   \~ 500GB disk space software and reference databases
+
+-   For optimal performance, we recommend running StrainCascade with 32 CPU cores, with 10GB of RAM allocated per core. However, less will also work.
+
+## Installation dependencies
+
+-   [git](https://git-scm.com/)
+
+-   [Apptainer](https://apptainer.org/)
+
+-   All further software dependencies (listed in detail under [Dependencies](dependencies.qmd)) are bundled in Apptainer images, which are automatically downloaded and used when installing/running StrainCascade. This approach enhances:
+
+    1.  Ease of use: Simplified installation and execution process
+
+    2.  Portability: Consistent performance across different computing environments
+
+    3.  Reproducibility: Ensures identical software environments for all users
+
+    4.  Version control: Precise management of software versions and their interactions Isolation: Minimises conflicts with existing system libraries
 
 ## Installation
 
@@ -16,7 +34,7 @@ Clone the StrainCascade GitHub repository
 git clone https://github.com/SBUJordi/StrainCascade.git
 ```
 
-Move the working directory to the StrainCascade directory
+Move to the StrainCascade directory
 
 ``` bash
 cd StrainCascade
