@@ -18,7 +18,7 @@
     "href": "installation.html",
     "title": "Installation",
     "section": "",
-    "text": "git\nApptainer"
+    "text": "Linux OS (e.g., CentOS, Ubuntu, Debian, etc.)\n~ 500GB disk space software and reference databases\nFor optimal performance, we recommend running StrainCascade with 32 CPU cores, with 10GB of RAM allocated per core. However, less will also work."
   },
   {
     "objectID": "overview.html",
@@ -31,14 +31,28 @@
     "objectID": "installation.html#dependencies",
     "href": "installation.html#dependencies",
     "title": "Installation",
-    "section": "",
-    "text": "git\nApptainer"
+    "section": "2 Dependencies",
+    "text": "2 Dependencies\n\ngit\nApptainer"
   },
   {
     "objectID": "installation.html#installation",
     "href": "installation.html#installation",
     "title": "Installation",
-    "section": "Installation",
-    "text": "Installation\nClone the StrainCascade GitHub repository\ngit clone https://github.com/SBUJordi/StrainCascade.git\nMove the working directory to the StrainCascade directory\ncd StrainCascade\nMake the StrainCascade scripts executable\nchmod +x scripts/*\nExecute the installation script (pulls Apptainer images and downloads databases)\n./scripts/StrainCascade_installation.sh"
+    "section": "3 Installation",
+    "text": "3 Installation\nClone the StrainCascade GitHub repository\ngit clone https://github.com/SBUJordi/StrainCascade.git\nMove to the StrainCascade directory\ncd StrainCascade\nMake the StrainCascade scripts executable\nchmod +x scripts/*\nExecute the installation script (pulls Apptainer images and downloads databases)\n./scripts/StrainCascade_installation.sh"
+  },
+  {
+    "objectID": "installation.html#system-requirements",
+    "href": "installation.html#system-requirements",
+    "title": "Installation",
+    "section": "",
+    "text": "Linux OS (e.g., CentOS, Ubuntu, Debian, etc.)\n~ 500GB disk space software and reference databases\nFor optimal performance, we recommend running StrainCascade with 32 CPU cores, with 10GB of RAM allocated per core. However, less will also work."
+  },
+  {
+    "objectID": "installation.html#installation-dependencies",
+    "href": "installation.html#installation-dependencies",
+    "title": "Installation",
+    "section": "2 Installation dependencies",
+    "text": "2 Installation dependencies\n\ngit\nApptainer\nAll further software dependencies (listed in detail under Dependencies) are bundled in Apptainer images, which are automatically downloaded and used when installing/running StrainCascade. This approach enhances:\n\nEase of use: Simplified installation and execution process\nPortability: Consistent performance across different computing environments\nReproducibility: Ensures identical software environments for all users\nVersion control: Precise management of software versions and their interactions Isolation: Minimizes conflicts with existing system libraries"
   }
 ]
