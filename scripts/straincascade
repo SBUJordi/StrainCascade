@@ -1,0 +1,273 @@
+#!/bin/bash
+
+# straincascade - Version 1.0.0
+# Author: Sebastian Bruno Ulrich Jordi
+
+# Main function script of StrainCascade pipeline
+
+# Get the directory of this script (don't move the pipeline scripts from the original location)
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Load utils from the script directory
+utils_file="$script_dir/utils.sh"
+if [ -f "$utils_file" ]; then
+  source "$utils_file"
+else
+  echo "Error: utils.sh not found in $script_dir"
+  exit 1
+fi
+
+# Default values
+output_directory=$(get_absolute_path $(pwd))
+sequencing_type="pacbio-hifi"
+threads=32
+locus_tag="automatic"
+modules_to_run="all"
+result_type="main"
+force_overwrite="yes" # Default force overwrite to yes
+version="1.0.0"
+databases_directory="$(dirname "$script_dir")/databases" # Default databases_directory directory
+
+# Valid sequencing types
+valid_seq_types=("pacbio-raw" "pacbio-corr" "pacbio-hifi" "nano-raw" "nano-corr" "nano-hq")
+
+# Valid result_type types
+valid_result_types=("all" "main" "R")
+
+# All available modules
+all_modules=(
+  "StrainCascade_LJA_assembly.sh"
+  "StrainCascade_SPAdes_assembly.sh"
+  "StrainCascade_Canu_assembly.sh"
+  "StrainCascade_Flye_assembly.sh"
+  #"StrainCascade_CISA_merging.sh"
+  "StrainCascade_assembly_evaluation1.sh"
+  "StrainCascade_MAC2_assembly_merging.sh"
+  "StrainCascade_assembly_evaluation2.sh"
+  "StrainCascade_Circlator_circularisation.sh"
+  "StrainCascade_assembly_evaluation3.sh"
+  "StrainCascade_BBMap_coverage.sh"
+  "StrainCascade_CheckM2_QC.sh"
+  "StrainCascade_GTDB-Tk_taxonomy.sh"
+  "StrainCascade_GTDB-Tk_de_novo_tree.sh"
+  "StrainCascade_Bakta_annotation.sh"
+  "StrainCascade_Prokka_annotation.sh"
+  "StrainCascade_MicrobeAnnotator_annotation.sh"
+  "StrainCascade_PlasmidFinder_identification.sh"
+  "StrainCascade_RGI_antimicrobial_resistance_identification.sh"
+  "StrainCascade_ResFinder_antimicrobial_resistance_identification.sh"
+  "StrainCascade_dbCAN3_CAZymes_identification.sh"
+  "StrainCascade_IslandPath_genomic_islands_identification.sh"
+  "StrainCascade_result_types_summary.sh"
+  "StrainCascade_result_type_processing.sh"
+)
+
+# Function to print usage
+usage() {
+    echo "Usage: $0 -i input [-o output_directory] [-s seq_type] [-t threads] [-r result_type] [-m modules] [-f force_overwrite] [-d databases_directory] [-l locus_tag] [-h] [-v]"
+    echo "  -i  input               Input directory or file (mandatory)"
+    echo "  -o  output_directory    Output directory (default: current working directory)"
+    echo "  -s  seq_type            Sequence type (default: pacbio-hifi). Options are: pacbio-raw | pacbio-corr | pacbio-hifi | nano-raw | nano-corr | nano-hq"
+    echo "  -t  threads             Number of threads (default: 32)"
+    echo "  -m  modules             Modules to run (default: all). Use comma-separated (or space-seperated) values for multiple modules."
+    echo "  -r  result_type         Result type (default: main). Options are: all, main, R"
+    echo "  -f  force_overwrite     Force overwrite existing results (default: yes). Options are: yes | no. (no does not always guarantee that nothing will be overwritten)"
+    echo "  -d  databases_directory           Path to databases directory (default: StrainCascade/databases)"
+    echo "  -l  locus_tag           Specify your own locus tag for genome annotation (default: automatically generated); must contain between 3 and 12 alphanumeric uppercase characters and start with a letter"
+    echo "                          Note: Custom database locations must maintain the same structure and naming as the default installation."
+    echo "  -h                      Show this help message and exit"
+    echo "  -v                      Show version information and exit"
+    exit 1
+}
+
+# Function to print version
+version() {
+    echo "StrainCascade version $version"
+    exit 0
+}
+
+# Function to check if a value is in an array
+contains() {
+    local value=$1
+    shift
+    for item; do
+        [[ $item == $value ]] && return 0
+    done
+    return 1
+}
+
+# Function to check if a module is valid
+is_valid_module() {
+    local module=$1
+    for valid_module in "${all_modules[@]}"; do
+        if [[ $valid_module == $module ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Function to check if file is a FASTA file
+is_fasta_file() {
+    local file=$1
+    if [[ $file == *.fasta || $file == *.fa || $file == *.fastq || $file == *.fastq.gz || $file == *.fna ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to handle input directory
+handle_input() {
+    local input=$1
+    if [[ -f $input ]]; then
+        echo $input
+    elif [[ -d $input ]]; then
+        local files=()
+        for f in "$input"/*; do
+            if is_fasta_file "$f"; then
+                files+=("$f")
+            else
+                echo "Warning: Uncommon file extension detected: $f"
+            fi
+        done
+        if [[ ${#files[@]} -eq 0 ]]; then
+            echo "Warning: No FASTA files found in the directory."
+        fi
+        echo "${files[@]}"
+    else
+        echo "Error: Invalid input directory or file." >&2
+        exit 1
+    fi
+}
+
+# Parse command line arguments
+while getopts "i:o:s:t:m:r:f:d:l:hv" opt; do
+    case "$opt" in
+        i) input=$OPTARG ;;
+        o) output_directory=$OPTARG ;;
+        s) sequencing_type=$OPTARG ;;
+        t) threads=$OPTARG ;;
+        m) modules_to_run=$OPTARG ;;
+        r) result_type=$OPTARG ;;
+        f) force_overwrite=$OPTARG ;;
+        d) databases_directory=$OPTARG ;;
+        l) locus_tag=$OPTARG ;;
+        h) usage ;;
+        v) version ;;
+        *) usage ;;
+    esac
+done
+
+echo "Initiating StrainCascade execution with the following parameters:"
+echo "Input files: $input_files"
+echo "Output directory: $output_directory"
+echo "Sequencing type: $sequencing_type"
+echo "Threads: $threads"
+echo "Selected modules: $selected_modules"
+echo "Result type: $result_type"
+echo "Force overwrite: $force_overwrite"
+echo "Databases directory: $databases_directory"
+echo "Locus tag: $locus_tag"
+
+# Check for mandatory arguments
+if [[ -z $input ]]; then
+    usage
+fi
+
+# Check if output directory exists and is writable
+if [[ ! -d $output_directory ]]; then
+    mkdir -p $output_directory
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Failed to create output directory." >&2
+        exit 1
+    fi
+elif [[ ! -w $output_directory ]]; then
+    echo "Error: Output directory is not writable." >&2
+    exit 1
+fi
+
+# Check if sequencing type is valid
+if ! contains "$sequencing_type" "${valid_seq_types[@]}"; then
+    echo "Error: Invalid sequencing type. Valid options are: ${valid_seq_types[*]}" >&2
+    exit 1
+fi
+
+# Check if number of threads is a positive integer
+if ! [[ $threads =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: Number of threads must be a positive integer." >&2
+    exit 1
+fi
+
+# Check if result_type type is valid
+if ! contains "$result_type" "${valid_result_types[@]}"; then
+    echo "Error: Invalid result_type type. Valid options are: ${valid_result_types[*]}" >&2
+    exit 1
+fi
+
+# Validate force_overwrite option
+if ! [[ $force_overwrite == "yes" || $force_overwrite == "no" ]]; then
+    echo "Error: Invalid option for force_overwrite. Valid options are: yes, no" >&2
+    exit 1
+fi
+
+# Check if databases_directory directory exists
+if [[ ! -d $databases_directory ]]; then
+    echo "Error: Databases directory does not exist: $databases_directory" >&2
+    exit 1
+fi
+
+# Validate locus tag if not "automatic"
+if [[ $locus_tag != "automatic" ]]; then
+    if [[ ! $locus_tag =~ ^[A-Z][A-Z0-9]{2,11}$ ]]; then
+        echo "ERROR: INSDC-incompliant locus_tag parameter! INSDC locus tag prefixes must contain between 3 and 12 alphanumeric uppercase characters and start with a letter."
+        exit 1
+    fi
+fi
+
+# Handle input directory or file
+input_files=$(handle_input "$input")
+if [[ -z $input_files ]]; then
+    echo "Error: No valid input files found." >&2
+    exit 1
+fi
+
+# Handle modules_to_run
+if [[ $modules_to_run == "all" ]]; then
+    selected_modules=$(IFS=' '; echo "${all_modules[*]}")
+else
+    # Split modules_to_run on commas or spaces
+    IFS=$'\n' read -d '' -ra module_array <<< "$(echo $modules_to_run | grep -oE '[^, ]+')"
+    
+    selected_modules=""
+    invalid_modules=()
+    for module in "${module_array[@]}"; do
+        module=$(echo "$module" | xargs)  # Trim spaces
+        if is_valid_module "$module"; then
+            selected_modules+="$module "
+        else
+            invalid_modules+=("$module")
+        fi
+    done
+    selected_modules="${selected_modules% }"  # Remove trailing space
+    
+    # Check for invalid modules and report them
+    if [ ${#invalid_modules[@]} -ne 0 ]; then
+        echo "Error: Invalid module(s): ${invalid_modules[*]}. Valid options are: ${all_modules[*]}"
+        exit 1
+    fi
+fi
+
+# Iterate over input files and run the pipeline
+for input_file in $input_files; do
+    bash StrainCascade_pipeline_wrapper.sh \
+        "$(get_absolute_path "$input_file")" \
+        "$(get_absolute_path "$output_directory")" \
+        "$sequencing_type" \
+        "$threads" \
+        "$selected_modules" \
+        "$result_type" \
+        "$force_overwrite" \
+        "$(get_absolute_path "$databases_directory")" \
+        "$locus_tag"
+done

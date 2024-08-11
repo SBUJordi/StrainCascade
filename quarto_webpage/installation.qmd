@@ -12,7 +12,7 @@ title: "Installation"
 
 ## Installation dependencies
 
--   [git](https://git-scm.com/)
+-   [Git](https://git-scm.com/)
 
 -   [Apptainer](https://apptainer.org/)
 
@@ -26,7 +26,7 @@ title: "Installation"
 
     4.  Version control: Precise management of software versions and their interactions Isolation: Minimises conflicts with existing system libraries
 
-## Installation
+## Installation steps
 
 Clone the StrainCascade GitHub repository
 
