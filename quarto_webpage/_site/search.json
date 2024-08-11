@@ -31,8 +31,8 @@
     "objectID": "installation.html#dependencies",
     "href": "installation.html#dependencies",
     "title": "Installation",
-    "section": "2 Dependencies",
-    "text": "2 Dependencies\n\ngit\nApptainer"
+    "section": "",
+    "text": "git\nApptainer"
   },
   {
     "objectID": "installation.html#installation",
@@ -53,6 +53,6 @@
     "href": "installation.html#installation-dependencies",
     "title": "Installation",
     "section": "2 Installation dependencies",
-    "text": "2 Installation dependencies\n\ngit\nApptainer\nAll further software dependencies (listed in detail under Dependencies) are bundled in Apptainer images, which are automatically downloaded and used when installing/running StrainCascade. This approach enhances:\n\nEase of use: Simplified installation and execution process\nPortability: Consistent performance across different computing environments\nReproducibility: Ensures identical software environments for all users\nVersion control: Precise management of software versions and their interactions Isolation: Minimizes conflicts with existing system libraries"
+    "text": "2 Installation dependencies\n\ngit\nApptainer\nAll further software dependencies (listed in detail under Dependencies) are bundled in Apptainer images, which are automatically downloaded and used when installing/running StrainCascade. This approach enhances:\n\nEase of use: Simplified installation and execution process\nPortability: Consistent performance across different computing environments\nReproducibility: Ensures identical software environments for all users\nVersion control: Precise management of software versions and their interactions Isolation: Minimises conflicts with existing system libraries"
   }
 ]
