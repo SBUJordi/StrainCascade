@@ -78,7 +78,7 @@ else
 fi
 
 # Run MicrobeAnnotator annotation
-log "$logs_dir" "microbeannotator_annotation.log" "Running MicrobeAnnotator annotation for $faa_file_to_use (presumtively generated with $file_origin) in $microbeannotator_output_dir"
+log "$logs_dir" "MicrobeAnnotator_annotation.log" "Running MicrobeAnnotator annotation for $faa_file_to_use (presumtively generated with $file_origin) in $microbeannotator_output_dir"
 
 
 
@@ -92,9 +92,6 @@ microbeannotator_cmd="microbeannotator -i /mnt/input/${sample_name}_${file_origi
                                        -p 1 \
                                        -t $threads \
                                        --refine"
-
-# Add the input file path
-prokka_cmd="$prokka_cmd /mnt/input/temp_input.faa"
 
 # Run Prokka using Apptainer
 apptainer exec \
@@ -119,7 +116,7 @@ apptainer exec \
 
 # Check exit status of MicrobeAnnotator
 if [ $? -ne 0 ]; then
-    log "$logs_dir" "microbeannotator_annotation.log" "Error: MicrobeAnnotator annotation failed for $faa_file_to_use"
+    log "$logs_dir" "MicrobeAnnotator_annotation.log" "Error: MicrobeAnnotator annotation failed for $faa_file_to_use"
     exit 1
 fi
 

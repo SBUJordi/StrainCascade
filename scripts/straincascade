@@ -46,7 +46,8 @@ all_modules=(
   "StrainCascade_assembly_evaluation2.sh"
   "StrainCascade_Circlator_circularisation.sh"
   "StrainCascade_assembly_evaluation3.sh"
-  "StrainCascade_BBMap_coverage.sh"
+  "StrainCascade_arrow_medaka_polishing.sh"
+  "StrainCascade_NGMLR_BBMap_coverage.sh"
   "StrainCascade_CheckM2_QC.sh"
   "StrainCascade_GTDB-Tk_taxonomy.sh"
   "StrainCascade_GTDB-Tk_de_novo_tree.sh"
@@ -58,6 +59,8 @@ all_modules=(
   "StrainCascade_ResFinder_antimicrobial_resistance_identification.sh"
   "StrainCascade_dbCAN3_CAZymes_identification.sh"
   "StrainCascade_IslandPath_genomic_islands_identification.sh"
+  "StrainCascade_VirSorter2_phage_identification.sh"
+  "StrainCascade_DeepVirFinder_phage_identification.sh"
   "StrainCascade_result_types_summary.sh"
   "StrainCascade_result_type_processing.sh"
 )
@@ -65,7 +68,7 @@ all_modules=(
 # Function to print usage
 usage() {
     echo "Usage: $0 -i input [-o output_directory] [-s seq_type] [-t threads] [-r result_type] [-m modules] [-f force_overwrite] [-d databases_directory] [-l locus_tag] [-h] [-v]"
-    echo "  -i  input               Input directory or file (mandatory)"
+    echo "  -i  input               Input file or directory containting files (mandatory). "
     echo "  -o  output_directory    Output directory (default: current working directory)"
     echo "  -s  seq_type            Sequence type (default: pacbio-hifi). Options are: pacbio-raw | pacbio-corr | pacbio-hifi | nano-raw | nano-corr | nano-hq"
     echo "  -t  threads             Number of threads (default: 32)"
@@ -108,9 +111,9 @@ is_valid_module() {
 }
 
 # Function to check if file is a FASTA file
-is_fasta_file() {
+is_fasta_or_bam_file() {
     local file=$1
-    if [[ $file == *.fasta || $file == *.fa || $file == *.fastq || $file == *.fastq.gz || $file == *.fna ]]; then
+    if [[ $file == *.fasta || $file == *.fa || $file == *.fastq || $file == *.fastq.gz || $file == *.fna || $file == *.bam ]]; then
         return 0
     else
         return 1
@@ -125,14 +128,14 @@ handle_input() {
     elif [[ -d $input ]]; then
         local files=()
         for f in "$input"/*; do
-            if is_fasta_file "$f"; then
+            if is_fasta_or_bam_file "$f"; then
                 files+=("$f")
             else
                 echo "Warning: Uncommon file extension detected: $f"
             fi
         done
         if [[ ${#files[@]} -eq 0 ]]; then
-            echo "Warning: No FASTA files found in the directory."
+            echo "Warning: No FASTA or BAM files found in the directory."
         fi
         echo "${files[@]}"
     else
