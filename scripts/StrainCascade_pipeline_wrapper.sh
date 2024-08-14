@@ -38,7 +38,7 @@ apptainer_images_dir="$pipeline_dir/apptainer_images"
 
 # Define the sample name variable
 sample_name="$input_file"
-for suffix in .fasta .fa .fastq .fastq.gz .fna; do
+for suffix in .fasta .fa .fastq .fastq.gz .fna .bam; do
   sample_name=$(basename "$sample_name" "$suffix")
 done
 
@@ -69,6 +69,53 @@ results_integration_abs="$(get_absolute_path "${main_results_dir_abs}/05_results
 # Define the logs directory
 logs_dir="$output_dir/pipeline_logs"
 create_directory "$logs_dir"
+
+## Handle input file types
+# List all matching .sif files and store them in an array
+readarray -t matching_files < <(find "$apptainer_images_dir" -name 'straincascade_genome_assembly*.sif' -print)
+
+# Check the number of matching files
+if [ ${#matching_files[@]} -eq 0 ]; then
+    echo "No matching .sif files found in $apptainer_images_dir. Continuing with the next script in the pipeline."
+    exit 0  # Exit gracefully, allowing the pipeline to continue
+elif [ ${#matching_files[@]} -gt 1 ]; then
+    echo "Warning: Multiple matching .sif files found. Using the first match: ${matching_files[0]}"
+fi
+
+# Proceed with the first match
+straincascade_genome_assembly=${matching_files[0]}
+
+if [ -n "$input_file" ]; then
+  # Extract the file name, and extension
+  dir=$(dirname "$input_file")
+  base=$(basename "$input_file")
+  extension="${base##*.}"
+  filename="${base%.*}"
+  
+  # Check if the extension is one of the accepted formats
+  if [[ "$extension" =~ ^(fasta|fa|fastq|fastq.gz|fna|bam)$ ]]; then
+    if [ "$extension" = "bam" ]; then
+      
+      bam_file="$input_file"
+      
+      apptainer exec \
+        --bind "$dir":/mnt/input \
+        "$straincascade_genome_assembly" \
+        /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
+                  conda activate tools_env && \
+                  samtools fasta /mnt/input/$base > /mnt/input/${filename}.fasta" 2>&1
+      
+      input_file="${dir}/${filename}.fasta"
+
+    else 
+      bam_file="not_available"
+    fi
+  else
+    echo "Error: Unsupported file extension"
+  fi
+else
+  echo "Error: No input file identified"
+fi
 
 
 ## Start processing ##
@@ -121,7 +168,11 @@ for module_script in "${selected_modules[@]}"; do
       # Run run final StrainCascade_assembly_evaluation module
       execute_module "$module_script" "$module_name" "$script_dir" "$logs_dir" "$apptainer_images_dir" "$output_dir" "$sample_name" "$threads" "$genome_assembly_main_abs"
       ;;
-    "StrainCascade_BBMap_coverage")
+    "StrainCascade_arrow_medaka_polishing")
+      # Run BBMap_coverage module
+      execute_module "$module_script" "$module_name" "$script_dir" "$logs_dir" "$apptainer_images_dir" "$input_file" "$bam_file" "$output_dir" "$sample_name" "$sequencing_type" "$threads" "$genome_assembly_main_abs"
+      ;;
+    "StrainCascade_NGMLR_BBMap_coverage")
       # Run BBMap_coverage module
       execute_module "$module_script" "$module_name" "$script_dir" "$logs_dir" "$apptainer_images_dir" "$input_file" "$output_dir" "$sample_name" "$sequencing_type" "$threads" "$genome_assembly_main_abs"
       ;;
@@ -166,8 +217,16 @@ for module_script in "${selected_modules[@]}"; do
       execute_module "$module_script" "$module_name" "$script_dir" "$logs_dir" "$apptainer_images_dir" "$output_dir" "$sample_name" "$threads" "$genome_assembly_main_abs" "$functional_analysis_main_abs" "$databases_dir"
       ;;
     "StrainCascade_IslandPath_genomic_islands_identification")
-      # Run IslandPath-DIMOB identification module
-      execute_module "$module_script" "$module_name" "$script_dir" "$logs_dir" "$output_dir" "$sample_name" "$miniconda_path" "$genome_annotation_main_abs" "$functional_analysis_main_abs"
+      # Run IslandPath genomic island identification module
+      execute_module "$module_script" "$module_name" "$script_dir" "$logs_dir" "$apptainer_images_dir" "$output_dir" "$sample_name" "$genome_annotation_main_abs" "$functional_analysis_main_abs"
+      ;;
+    "StrainCascade_VirSorter2_phage_identification")
+      # Run VirSorter2 phage identification module
+      execute_module "$module_script" "$module_name" "$script_dir" "$logs_dir" "$apptainer_images_dir" "$output_dir" "$sample_name" "$threads" "$genome_assembly_main_abs" "$functional_analysis_main_abs" "$databases_dir"
+      ;;
+    "StrainCascade_DeepVirFinder_phage_identification")
+      # Run VirSorter2 phage identification module
+      execute_module "$module_script" "$module_name" "$script_dir" "$logs_dir" "$apptainer_images_dir" "$output_dir" "$sample_name" "$threads" "$genome_assembly_main_abs" "$functional_analysis_main_abs"
       ;;
     "StrainCascade_results_summary")
       # Run results summary module

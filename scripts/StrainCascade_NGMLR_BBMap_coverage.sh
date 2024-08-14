@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# StrainCascade_BBMap_coverage.sh - Version 1.0.0
+# StrainCascade_NGMLR_BBMap_coverage.sh - Version 1.0.0
 # Author: Sebastian Bruno Ulrich Jordi
 
 # Check for the correct number of command line arguments
@@ -21,11 +21,11 @@ genome_assembly_main_abs=$9
 
 # Check if sequencing type contains or is the pattern "pacbio" or "nano"; this covers all sequencing types supported by StrainCascade
 if [[ "$sequencing_type" == *"pacbio"* ]]; then
-    bbmap_sequencing_type="pacbio"
+    ngmlr_sequencing_type="pacbio"
 elif [[ "$sequencing_type" == *"nano"* ]]; then
-    bbmap_sequencing_type="ont"
+    ngmlr_sequencing_type="ont"
 else
-    log "$logs_dir" "BBMap_coverage.log" "Skipping BBMap due to sequencing type: $sequencing_type. StrainCascade was developped for 'pacbio' or 'nanopore' data."
+    log "$logs_dir" "NGMLR_BBMap_coverage.log" "Skipping BBMap due to sequencing type: $sequencing_type. StrainCascade was developped for 'pacbio' or 'nanopore' data."
     echo "Skipping due to incompatible sequencing type: $sequencing_type. StrainCascade was developped for 'pacbio' or 'nanopore' data."
     exit 0  # Exit gracefully, allowing the pipeline to continue
 fi
@@ -55,8 +55,8 @@ fi
 straincascade_assembly_qc_refinement=${matching_files[0]}
 
 # Create output directory
-bbmap_output_dir="$output_dir/BBMap_coverage_results"
-create_directory "$bbmap_output_dir"  # Ensure the output directory is created
+ngmlr_bbmap_output_dir="$output_dir/NGMLR_BBMap_coverage_results"
+create_directory "$ngmlr_bbmap_output_dir"  # Ensure the output directory is created
 
 # Retrieve the analysis assembly file from genome_assembly_main_abs using the new function
 analysis_assembly_file=$(find_analysis_assembly_file "$genome_assembly_main_abs")
@@ -70,7 +70,7 @@ fi
 # Check if the input file exists
 if [ ! -f "$input_file" ]; then
     echo "Error: Input file $input_file does not exist."
-    log "$logs_dir" "BBMap_coverage.log" "Error: Input file $input_file does not exist."
+    log "$logs_dir" "NGMLR_BBMap_coverage.log" "Error: Input file $input_file does not exist."
     exit 1
 else
     echo "Calculating maximum read length from $input_file"
@@ -87,7 +87,7 @@ else
     # Check if max_read_length was calculated correctly
     if [ -z "$max_read_length" ]; then
         echo "Error: Failed to calculate maximum read length."
-        log "$logs_dir" "BBMap_coverage.log" "Error: Failed to calculate maximum read length."
+        log "$logs_dir" "NGMLR_BBMap_coverage.log" "Error: Failed to calculate maximum read length."
         exit 1
     else
         echo "Maximum read length: $max_read_length"
@@ -95,18 +95,18 @@ else
         # Add a buffer to the maximum read length
         max_read_length=$((max_read_length + 100))
 
-        echo "Maximum read length with buffer (+100bp): $max_read_length"
+        echo "Maximum read length including buffer (+100bp): $max_read_length"
     fi
 fi
 
 # Run BBMap or NGMLR based on the maximum read length
 if [ "$max_read_length" -le 600 ]; then
-    log "$logs_dir" "BBMap_coverage.log" "Running BBMap for $input_file and $analysis_assembly_file"
+    log "$logs_dir" "NGMLR_BBMap_coverage.log" "Running BBMap for $input_file and $analysis_assembly_file"
 
     apptainer exec \
         --bind "$(dirname "$input_file")":/mnt/sequencing_file_dir \
         --bind "$(dirname "$analysis_assembly_file")":/mnt/assembly_file_dir \
-        --bind "$bbmap_output_dir":/mnt/output \
+        --bind "$ngmlr_bbmap_output_dir":/mnt/output \
         "$straincascade_assembly_qc_refinement" \
         /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
                     conda activate bbmap_ngmlr_env && \
@@ -119,11 +119,11 @@ if [ "$max_read_length" -le 600 ]; then
                     path=/mnt/output" 2>&1
 
 else
-    log "$logs_dir" "BBMap_coverage.log" "Running NGMLR for $input_file and $analysis_assembly_file"
+    log "$logs_dir" "NGMLR_BBMap_coverage.log" "Running NGMLR for $input_file and $analysis_assembly_file"
     apptainer exec \
         --bind "$(dirname "$input_file")":/mnt/sequencing_file_dir \
         --bind "$(dirname "$analysis_assembly_file")":/mnt/assembly_file_dir \
-        --bind "$bbmap_output_dir":/mnt/output \
+        --bind "$ngmlr_bbmap_output_dir":/mnt/output \
         "$straincascade_assembly_qc_refinement" \
         /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
                     conda activate bbmap_ngmlr_env && \
@@ -131,13 +131,13 @@ else
                     -q /mnt/sequencing_file_dir/$(basename "$input_file") \
                     -r /mnt/assembly_file_dir/$(basename "$analysis_assembly_file") \
                     -o /mnt/output/"${sample_name}_mapped.sam" \
-                    -x "$bbmap_sequencing_type" \
+                    -x "$ngmlr_sequencing_type" \
                     -t "$threads"" 2>&1
 fi
 
 # Generate coverage statistics
 apptainer exec \
-    --bind "$bbmap_output_dir":/mnt/input_output \
+    --bind "$ngmlr_bbmap_output_dir":/mnt/input_output \
     "$straincascade_assembly_qc_refinement" \
     /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
                 conda activate bbmap_ngmlr_env && \
@@ -145,12 +145,12 @@ apptainer exec \
                 in=/mnt/input_output/$(basename "${sample_name}_mapped.sam") \
                 out=/mnt/input_output/$(basename "${analysis_assembly_file%.*}_coverage.txt") \
                 overwrite=true" 2>&1
-log "$logs_dir" "BBMap_coverage.log" "Generated coverage statistics for $analysis_assembly_file"
+log "$logs_dir" "NGMLR_BBMap_coverage.log" "Generated coverage statistics for $analysis_assembly_file"
 
 # Copy the *_coverage.txt file to genome_assembly_main_abs
-coverage_file=$(find "$bbmap_output_dir" -type f -name "*_coverage.txt")
+coverage_file=$(find "$ngmlr_bbmap_output_dir" -type f -name "*_coverage.txt")
 if [ -n "$coverage_file" ]; then
     cp "$coverage_file" "$genome_assembly_main_abs"
 else
-    echo "Error: No _coverage.txt file found in $bbmap_output_dir"
+    echo "Error: No _coverage.txt file found in $ngmlr_bbmap_output_dir"
 fi
