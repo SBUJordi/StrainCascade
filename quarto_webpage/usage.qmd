@@ -27,7 +27,7 @@ To quickly run the StrainCascade pipeline on a sequencing sample from the comman
 straincascade -i /path/to/your/input_file.bam
 ```
 
-**Note:** Running the pipeline is resource-intensive and will overwhelm standard desktop or laptop computers, particularly with larger jobs. For optimal performance, we strongly recommend using a high-performance computing (HPC) environment.
+**Note:** Running the StrainCascade is resource-intensive and will overwhelm standard desktop or laptop computers. For optimal performance, we strongly recommend using a high-performance computing (HPC) environment.
 
 For efficient execution, it's recommended to submit the pipeline as a SLURM `sbatch` job. Below is an example of a basic SLURM submission script. Be sure to adjust the `--partition` parameter to match your environment:
 

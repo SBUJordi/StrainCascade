@@ -127,30 +127,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <a class="nav-link" href="./index.html"> 
 <span class="menu-text">Overview</span></a>
   </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./installation.html"> 
-<span class="menu-text">Installation</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link active" href="./usage.html" aria-current="page"> 
-<span class="menu-text">Usage</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./tutorial.html"> 
-<span class="menu-text">Tutorial</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./dependencies.html"> 
-<span class="menu-text">Dependencies</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./publications.html"> 
-<span class="menu-text">Publications</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./license.html"> 
-<span class="menu-text">License</span></a>
-  </li>  
 </ul>
           </div> <!-- /navcollapse -->
             <div class="quarto-navbar-tools">
@@ -211,7 +187,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 data-number="1" class="anchored" data-anchor-id="quick-start"><span class="header-section-number">1</span> Quick start</h2>
 <p>To quickly run the StrainCascade pipeline on a sequencing sample from the command line, use the following minimal command:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">straincascade</span> <span class="at">-i</span> /path/to/your/input_file.bam</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p><strong>Note:</strong> Running the pipeline is resource-intensive and will overwhelm standard desktop or laptop computers, particularly with larger jobs. For optimal performance, we strongly recommend using a high-performance computing (HPC) environment.</p>
+<p><strong>Note:</strong> Running the StrainCascade is resource-intensive and will overwhelm standard desktop or laptop computers. For optimal performance, we strongly recommend using a high-performance computing (HPC) environment.</p>
 <p>For efficient execution, it’s recommended to submit the pipeline as a SLURM <code>sbatch</code> job. Below is an example of a basic SLURM submission script. Be sure to adjust the <code>--partition</code> parameter to match your environment:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">#!/bin/bash #SBATCH </span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">--job-name=</span><span class="st">"StrainCascade"</span> </span>
