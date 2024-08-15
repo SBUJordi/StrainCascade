@@ -7,20 +7,20 @@ website:
     left:
       - href: index.qmd
         text: Overview
-      - href: installation.qmd
-        text: Installation
-      - href: usage.qmd
-        text: Usage
-      - href: tutorial.qmd
-        text: Tutorial
-#      - href: documentation.qmd
-#        text: Documentation
-      - href: dependencies.qmd
-        text: Dependencies
-      - href: publications.qmd
-        text: Publications
-      - href: license.qmd
-        text: License
+#       - href: installation.qmd
+#         text: Installation
+#       - href: usage.qmd
+#         text: Usage
+#       - href: tutorial.qmd
+#         text: Tutorial
+#       - href: documentation.qmd
+#         text: Documentation
+#       - href: dependencies.qmd
+#         text: Dependencies
+#       - href: publications.qmd
+#         text: Publications
+#       - href: license.qmd
+#         text: License
         
   page-navigation: true
 
