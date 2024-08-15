@@ -132,7 +132,7 @@ else
                     -r /mnt/assembly_file_dir/$(basename "$analysis_assembly_file") \
                     -o /mnt/output/"${sample_name}_mapped.sam" \
                     -x "$ngmlr_sequencing_type" \
-                    -t "$threads"" 2>&1
+                    -t $threads" 2>&1
 fi
 
 # Generate coverage statistics

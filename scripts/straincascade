@@ -68,7 +68,7 @@ all_modules=(
 # Function to print usage
 usage() {
     echo "Usage: $0 -i input [-o output_directory] [-s seq_type] [-t threads] [-r result_type] [-m modules] [-f force_overwrite] [-d databases_directory] [-l locus_tag] [-h] [-v]"
-    echo "  -i  input               Input file or directory containting files (mandatory). "
+    echo "  -i  input               Input file or directory containting files (mandatory). Valid file formats include: .fasta, .fa, .fastq, .fastq.gz, .fna, and .bam"
     echo "  -o  output_directory    Output directory (default: current working directory)"
     echo "  -s  seq_type            Sequence type (default: pacbio-hifi). Options are: pacbio-raw | pacbio-corr | pacbio-hifi | nano-raw | nano-corr | nano-hq"
     echo "  -t  threads             Number of threads (default: 32)"
@@ -76,8 +76,8 @@ usage() {
     echo "  -r  result_type         Result type (default: main). Options are: all, main, R"
     echo "  -f  force_overwrite     Force overwrite existing results (default: yes). Options are: yes | no. (no does not always guarantee that nothing will be overwritten)"
     echo "  -d  databases_directory           Path to databases directory (default: StrainCascade/databases)"
+    echo "                          Note: Custom database locations must maintain the same structure and naming of subdirectories/files as the default installation."
     echo "  -l  locus_tag           Specify your own locus tag for genome annotation (default: automatically generated); must contain between 3 and 12 alphanumeric uppercase characters and start with a letter"
-    echo "                          Note: Custom database locations must maintain the same structure and naming as the default installation."
     echo "  -h                      Show this help message and exit"
     echo "  -v                      Show version information and exit"
     exit 1
