@@ -7,13 +7,14 @@ website:
     left:
       - href: index.qmd
         text: Overview
-        icon: house-fill
       - href: installation.qmd
         text: Installation
+      - href: usage.qmd
+        text: Usage
       - href: tutorial.qmd
         text: Tutorial
-      - href: documentation.qmd
-        text: Documentation
+#      - href: documentation.qmd
+#        text: Documentation
       - href: dependencies.qmd
         text: Dependencies
       - href: publications.qmd

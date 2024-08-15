@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# StrainCascade_arrow_medaka_polishing.sh - Version 1.0.0
+# StrainCascade_arrow_medaka_polishing.sh - Version 1.0.4
 # Author: Sebastian Bruno Ulrich Jordi
 
 # Check for the correct number of command line arguments
 if [ "$#" -ne 10 ]; then
-    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <input_file> <bam_file> <output_dir> <sample_name> <sequencing_type> <threads> <genome_assembly_main_abs>"
-    exit 1
+    echo "Error: Incorrect number of arguments. Skipping this module and continuing with the next script in the pipeline."
+    exit 0
 fi
 
 script_dir=$1
@@ -20,38 +20,29 @@ sequencing_type=$8
 threads=$9
 genome_assembly_main_abs=${10}
 
+# Source utils file
+if ! source "${script_dir}/utils.sh"; then
+    echo "Error: utils.sh not found in $script_dir. Skipping this module and continuing with the next script in the pipeline."
+    exit 0
+fi
+
 # Determine polishing tool based on sequencing type
-if [[ "$sequencing_type" == *"pacbio"* ]]; then
-    if [[ -n "$bam_file" && "$bam_file" != "not_available" ]]; then
-        polishing_tool="arrow"
-    else
-        echo "BAM file is required for polishing of PacBio data by arrow but is not available. Continuing with the next module in the pipeline."
-        exit 0  # Exit gracefully, allowing the pipeline to continue
-    fi
+if [[ "$sequencing_type" == *"pacbio"* && -n "$bam_file" && "$bam_file" != "not_available" ]]; then
+    polishing_tool="arrow"
 elif [[ "$sequencing_type" == *"nano"* ]]; then
     polishing_tool="medaka"
 else
-    echo "No valid sequencing type identified. Continuing with the next module in the pipeline."
-    exit 0  # Exit gracefully, allowing the pipeline to continue
+    echo "No valid sequencing type or necessary BAM file identified. Skipping this module and continuing with the next script in the pipeline."
+    exit 0
 fi
 
-# Load utils from the script directory
-utils_file="${script_dir}/utils.sh"
-if [ -f "$utils_file" ]; then
-  source "$utils_file"
-else
-  echo "Error: utils.sh not found in $script_dir"
-  exit 1
-fi
-
-## Define paths and variables for this script ##
-# List all matching .sif files and store them in an array
+# Find matching .sif files
 matching_files=($(ls "$apptainer_images_dir"/straincascade_assembly_qc_refinement*.sif 2> /dev/null))
 
 # Check the number of matching files
 if [ ${#matching_files[@]} -eq 0 ]; then
-    echo "No matching .sif files found in $apptainer_images_dir. Continuing with the next script in the pipeline."
-    exit 0  # Exit gracefully, allowing the pipeline to continue
+    echo "No matching .sif files found in $apptainer_images_dir. Skipping this module and continuing with the next script in the pipeline."
+    exit 0
 elif [ ${#matching_files[@]} -gt 1 ]; then
     echo "Warning: Multiple matching .sif files found. Using the first match: ${matching_files[0]}"
 fi
@@ -61,84 +52,158 @@ straincascade_assembly_qc_refinement=${matching_files[0]}
 
 # Create output directory
 polishing_output_dir="$output_dir/${polishing_tool}_polishing_results"
-create_directory "$polishing_output_dir"  # Ensure the output directory is created
+if ! create_directory "$polishing_output_dir"; then
+    echo "Error: Failed to create output directory. Skipping this module and continuing with the next script in the pipeline."
+    exit 0
+fi
 
 # Retrieve the analysis assembly file from genome_assembly_main_abs using the new function
 analysis_assembly_file=$(find_analysis_assembly_file "$genome_assembly_main_abs")
 if [ -z "$analysis_assembly_file" ]; then
-    echo "Error: No assembly files found. Skipping this module (${polishing_tool} polishing) and continuing with the next script in the pipeline."
+    echo "Error: No assembly files found. Skipping this module and continuing with the next script in the pipeline."
     exit 0
 else
     echo "Using $analysis_assembly_file assembly for analysis."
 fi
 
-# Check if the input file exists
+# Check if input files exist
 if [ ! -f "$input_file" ]; then
-    echo "Error: Input file $input_file does not exist."
-    log "$logs_dir" "${polishing_tool}_polishing.log" "Error: Input file $input_file does not exist."
-    exit 1
-else
-    echo "Using $input_file as sequencing input file for analysis"
+    echo "Error: Input file $input_file does not exist. Skipping this module and continuing with the next script in the pipeline."
+    exit 0
+fi
+if [ "$polishing_tool" = "arrow" ] && [ ! -f "$bam_file" ]; then
+    echo "Error: BAM file $bam_file does not exist. Skipping this module and continuing with the next script in the pipeline."
+    exit 0
 fi
 
-# Set up polishing rounds
+# Standardize RG IDs and add necessary tags in the BAM file
+echo "Standardizing RG IDs and adding necessary tags in the BAM file..."
+log "$logs_dir" "${polishing_tool}_polishing.log" "Standardizing RG IDs and adding necessary tags in the BAM file..."
+
+fixed_bam_file="${polishing_output_dir}/fixed_$(basename "$bam_file")"
+
+# Run the standardization process inside the Apptainer
+if ! apptainer exec \
+    --bind "$(dirname "$bam_file")":/mnt/input \
+    --bind "$polishing_output_dir":/mnt/output \
+    "$straincascade_assembly_qc_refinement" \
+    /bin/bash -c "
+    set -e && \
+    new_rg_id=$(printf "%08x" $RANDOM) && \
+    source /opt/conda/etc/profile.d/conda.sh && \
+    conda activate tools_env && \
+    samtools addreplacerg \
+    -r \"ID:\${new_rg_id}\" \
+    -r \"PL:PACBIO\" \
+    -r \"PU:unknown\" \
+    -r \"LB:unknown\" \
+    -r \"SM:sample\" \
+    -o /mnt/output/fixed_\$(basename \"$bam_file\") \
+    /mnt/input/\$(basename \"$bam_file\") && \
+    samtools index /mnt/output/fixed_\$(basename \"$bam_file\") && \
+    samtools view -H /mnt/output/fixed_\$(basename \"$bam_file\")
+    "
+then
+    echo "Error: Failed to standardize RG IDs and add necessary tags in the BAM file. Skipping this module and continuing with the next script in the pipeline."
+    exit 0
+fi
+
+# Update the bam_file variable to use the fixed version
+bam_file="$fixed_bam_file"
+echo "BAM file with standardized RG IDs and necessary tags: $bam_file"
+log "$logs_dir" "${polishing_tool}_polishing.log" "BAM file with standardized RG IDs and necessary tags: $bam_file"
+
+# Create PacBio index file (.pbi)
+echo "Creating PacBio index file..."
+log "$logs_dir" "${polishing_tool}_polishing.log" "Creating PacBio index file..."
+
+if ! apptainer exec \
+    --bind "$(dirname "$bam_file")":/mnt/bam_file_dir \
+    "$straincascade_assembly_qc_refinement" \
+    /bin/bash -c "
+    source /opt/conda/etc/profile.d/conda.sh && \
+    conda activate tools_env && \
+    pbindex /mnt/bam_file_dir/$(basename "$bam_file")
+    "
+then
+    echo "Error: Failed to create PacBio index file. Skipping this module and continuing with the next script in the pipeline."
+    exit 0
+fi
+
+echo "PacBio index file created successfully."
+log "$logs_dir" "${polishing_tool}_polishing.log" "PacBio index file created successfully."
+
+# Polishing rounds
 polishing_rounds=2
 current_assembly="$analysis_assembly_file"
 
-# Perform polishing rounds
 for ((round=1; round<=polishing_rounds; round++)); do
     echo "Starting polishing round $round"
     log "$logs_dir" "${polishing_tool}_polishing.log" "Starting polishing round $round"
 
     round_output_dir="${polishing_output_dir}/round_${round}"
-    create_directory "$round_output_dir"
+    if ! create_directory "$round_output_dir"; then
+        echo "Error: Failed to create round output directory. Skipping this module and continuing with the next script in the pipeline."
+        exit 0
+    fi
 
     if [ "$polishing_tool" = "medaka" ]; then
-        polishing_cmd="medaka_consensus -i /mnt/input_file/$(basename "$input_file") \
-                       -d /mnt/input_assembly/$(basename "$current_assembly") \
-                       -o /mnt/output \
-                       -t $threads"
-        conda_env="medaka_env"
+        polishing_cmd="conda activate medaka_env && \
+        medaka_consensus \
+                -i /mnt/input_file/$(basename "$input_file") \
+                -d /mnt/input_assembly/$(basename "$current_assembly") \
+                -o /mnt/output -t $threads"
     elif [ "$polishing_tool" = "arrow" ]; then
-        polishing_cmd="variantCaller --algorithm=arrow \
-                       -j $threads \
-                       -r /mnt/input_assembly/$(basename "$current_assembly") \
-                       /mnt/input_file/$(basename "$input_file") \
-                       -o /mnt/output/consensus.fasta"
-        conda_env="genomicconsensus_env"
-    else
-        echo "Error: Unknown polishing tool: $polishing_tool"
-        log "$logs_dir" "polishing.log" "Error: Unknown polishing tool: $polishing_tool"
-        exit 1
+        polishing_cmd="
+        conda activate genomicconsensus_env && \
+        variantCaller --algorithm=arrow \
+        -j $threads \
+        -r /mnt/input_assembly/$(basename "$current_assembly") \
+        -o /mnt/output/consensus.fasta \
+        /mnt/bam_file_dir/$(basename "$bam_file")"
     fi
 
     # Run the polishing command
-    apptainer exec \
+    if ! apptainer exec \
         --bind "$(dirname "$input_file")":/mnt/input_file \
         --bind "$(dirname "$current_assembly")":/mnt/input_assembly \
         --bind "$round_output_dir":/mnt/output \
+        --bind "$(dirname "$bam_file")":/mnt/bam_file_dir \
         "$straincascade_assembly_qc_refinement" \
         /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
-                      conda activate $conda_env && \
-                      $polishing_cmd" 2>&1
-
-    # Check if polishing ran successfully
-    if [ $? -eq 0 ]; then
-        echo "Round $round of ${polishing_tool} polishing completed successfully."
-        log "$logs_dir" "${polishing_tool}_polishing.log" "Round $round of ${polishing_tool} polishing completed successfully."
-        
-        if [ "$polishing_tool" = "medaka" ] || [ "$polishing_tool" = "arrow" ]; then
-            current_assembly="$round_output_dir/consensus.fasta"
-        fi
-    else
-        echo "Error: Round $round of ${polishing_tool} polishing failed."
-        log "$logs_dir" "${polishing_tool}_polishing.log" "Error: Round $round of ${polishing_tool} polishing failed."
-        exit 1
+        $polishing_cmd" 2>&1
+    then
+        echo "Error: Round $round of ${polishing_tool} polishing failed. Skipping this module and continuing with the next script in the pipeline."
+        exit 0
     fi
+
+    echo "Round $round of ${polishing_tool} polishing completed successfully."
+    log "$logs_dir" "${polishing_tool}_polishing.log" "Round $round of ${polishing_tool} polishing completed successfully."
+    
+    current_assembly="$round_output_dir/consensus.fasta"
 done
 
 echo "Final polished assembly: $current_assembly"
 log "$logs_dir" "${polishing_tool}_polishing.log" "Final polished assembly: $current_assembly"
 
-# Clean up
-rm -f "$polishing_output_dir"/*/temp_input_*
+# Overwrite the initial assembly file with the polished assembly
+if [ -f "$current_assembly" ]; then
+    cp "$current_assembly" "$analysis_assembly_file"
+    echo "Initial assembly file overwritten with polished assembly."
+    log "$logs_dir" "${polishing_tool}_polishing.log" "Initial assembly file overwritten with polished assembly."
+else
+    echo "Error: Final polished assembly not found. Initial assembly file not overwritten."
+    log "$logs_dir" "${polishing_tool}_polishing.log" "Error: Final polished assembly not found. Initial assembly file not overwritten."
+fi
+
+# Cleanup
+if [ "$polishing_tool" = "arrow" ]; then
+    echo "Cleaning up temporary BAM file..."
+    log "$logs_dir" "${polishing_tool}_polishing.log" "Cleaning up temporary BAM file..."
+    rm -f "$fixed_bam_file" "${fixed_bam_file}.bai"
+fi
+
+echo "Polishing module completed successfully."
+log "$logs_dir" "${polishing_tool}_polishing.log" "Polishing module completed successfully."
+
+exit 0

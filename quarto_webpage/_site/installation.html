@@ -124,13 +124,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link" href="./index.html"> <i class="bi bi-house-fill" role="img">
-</i> 
+    <a class="nav-link" href="./index.html"> 
 <span class="menu-text">Overview</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link active" href="./installation.html" aria-current="page"> 
 <span class="menu-text">Installation</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="./usage.html"> 
+<span class="menu-text">Usage</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./tutorial.html"> 
@@ -170,7 +173,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <ul>
   <li><a href="#system-requirements" id="toc-system-requirements" class="nav-link active" data-scroll-target="#system-requirements"><span class="header-section-number">1</span> System requirements</a></li>
   <li><a href="#installation-dependencies" id="toc-installation-dependencies" class="nav-link" data-scroll-target="#installation-dependencies"><span class="header-section-number">2</span> Installation dependencies</a></li>
-  <li><a href="#installation" id="toc-installation" class="nav-link" data-scroll-target="#installation"><span class="header-section-number">3</span> Installation</a></li>
+  <li><a href="#installation-steps" id="toc-installation-steps" class="nav-link" data-scroll-target="#installation-steps"><span class="header-section-number">3</span> Installation steps</a></li>
   </ul>
 </nav>
     </div>
@@ -207,7 +210,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="installation-dependencies" class="level2" data-number="2">
 <h2 data-number="2" class="anchored" data-anchor-id="installation-dependencies"><span class="header-section-number">2</span> Installation dependencies</h2>
 <ul>
-<li><p><a href="https://git-scm.com/">git</a></p></li>
+<li><p><a href="https://git-scm.com/">Git</a></p></li>
 <li><p><a href="https://apptainer.org/">Apptainer</a></p></li>
 <li><p>All further software dependencies (listed in detail under <a href="./dependencies.html">Dependencies</a>) are bundled in Apptainer images, which are automatically downloaded and used when installing/running StrainCascade. This approach enhances:</p>
 <ol type="1">
@@ -218,8 +221,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </ol></li>
 </ul>
 </section>
-<section id="installation" class="level2" data-number="3">
-<h2 data-number="3" class="anchored" data-anchor-id="installation"><span class="header-section-number">3</span> Installation</h2>
+<section id="installation-steps" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="installation-steps"><span class="header-section-number">3</span> Installation steps</h2>
 <p>Clone the StrainCascade GitHub repository</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone https://github.com/SBUJordi/StrainCascade.git</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Move to the StrainCascade directory</p>
@@ -228,6 +231,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">chmod</span> +x scripts/<span class="pp">*</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Execute the installation script (pulls Apptainer images and downloads databases)</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/StrainCascade_installation.sh</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>You will be prompted by an interactive installation guide if you have enough disk space.</p>
+<pre class="console"><code>Running StrainCascade installation...
+Sufficient disk space available: XXXGB
+Apptainer is installed.
+Do you want to do a full installation of StrainCascade? (y/n)</code></pre>
+<p>For a complete installation from scratch, choose <code>y</code> when asked:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">y</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>The installation process will take a while.</p>
 
 
 </section>

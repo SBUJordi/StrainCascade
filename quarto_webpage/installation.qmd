@@ -51,3 +51,22 @@ Execute the installation script (pulls Apptainer images and downloads databases)
 ``` bash
 ./scripts/StrainCascade_installation.sh
 ```
+
+You will be prompted by an interactive installation guide if you have enough disk space.
+
+``` console
+Running StrainCascade installation...
+Sufficient disk space available: XXXGB
+Apptainer is installed.
+Do you want to do a full installation of StrainCascade? (y/n)
+```
+
+For a complete installation from scratch, choose `y` when asked:
+
+``` bash
+y
+```
+
+The installation process will take a while.
+
+

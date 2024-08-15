@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Publications – StrainCascade</title>
+<title>Usage – StrainCascade</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -19,6 +19,40 @@ ul.task-list li input[type="checkbox"] {
   width: 0.8em;
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 </style>
 
@@ -98,7 +132,7 @@ ul.task-list li input[type="checkbox"] {
 <span class="menu-text">Installation</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./usage.html"> 
+    <a class="nav-link active" href="./usage.html" aria-current="page"> 
 <span class="menu-text">Usage</span></a>
   </li>  
   <li class="nav-item">
@@ -110,7 +144,7 @@ ul.task-list li input[type="checkbox"] {
 <span class="menu-text">Dependencies</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link active" href="./publications.html" aria-current="page"> 
+    <a class="nav-link" href="./publications.html"> 
 <span class="menu-text">Publications</span></a>
   </li>  
   <li class="nav-item">
@@ -128,15 +162,21 @@ ul.task-list li input[type="checkbox"] {
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Contents</h2>
+   
+  <ul>
+  <li><a href="#quick-start" id="toc-quick-start" class="nav-link active" data-scroll-target="#quick-start"><span class="header-section-number">1</span> Quick start</a></li>
+  </ul>
+</nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Publications</h1>
+<h1 class="title">Usage</h1>
 </div>
 
 
@@ -153,8 +193,41 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
+<pre class="console"><code>straincascade -i input [-o output_directory] [-s seq_type] [-t threads] [-r result_type] [-m modules] [-f force_overwrite] [-d databases_directory] [-l locus_tag] [-h] [-v]
+
+  -i  input               Input file or directory containing files (mandatory). Valid file formats include: `.fasta`, `.fa`, `.fastq`, `.fastq.gz`, `.fna`, and `.bam`. 
+  -o  output_directory    Output directory (default: current working directory).
+  -s  seq_type            Sequence type (default: pacbio-hifi). Options are: pacbio-raw | pacbio-corr | pacbio-hifi | nano-raw | nano-corr | nano-hq.
+  -t  threads             Number of threads (default: 32).
+  -m  modules             Modules to run (default: all). Use comma-separated or space-separated values for multiple modules.
+  -r  result_type         Result type (default: main). Options are: all, main, R.
+  -f  force_overwrite     Force overwrite existing results (default: yes). Options are: yes | no. (Note: 'no' does not always guarantee that nothing will be overwritten.)
+  -d  databases_directory Path to databases directory (default: StrainCascade/databases).
+                          Note: Custom database locations must maintain the same structure and naming of subdirectories/files as the default installation.
+  -l  locus_tag           Specify your own locus tag for genome annotation (default: automatically generated). Must contain between 3 and 12 alphanumeric uppercase characters and start with a letter.
+  -h                      Show this help message and exit.
+  -v                      Show version information and exit.</code></pre>
+<section id="quick-start" class="level2" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="quick-start"><span class="header-section-number">1</span> Quick start</h2>
+<p>To quickly run the StrainCascade pipeline on a sequencing sample from the command line, use the following minimal command:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">straincascade</span> <span class="at">-i</span> /path/to/your/input_file.bam</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p><strong>Note:</strong> Running the pipeline is resource-intensive and will overwhelm standard desktop or laptop computers, particularly with larger jobs. For optimal performance, we strongly recommend using a high-performance computing (HPC) environment.</p>
+<p>For efficient execution, it’s recommended to submit the pipeline as a SLURM <code>sbatch</code> job. Below is an example of a basic SLURM submission script. Be sure to adjust the <code>--partition</code> parameter to match your environment:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">#!/bin/bash #SBATCH </span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">--job-name=</span><span class="st">"StrainCascade"</span> </span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">#SBATCH --output=StrainCascade\_%j.out </span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">#SBATCH --cpus-per-task=32 </span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co">#SBATCH --mem=320G # 10GB per CPU for 32 CPUs </span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co">#SBATCH --partition=your_partition</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Execute the job</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="ex">straincascade</span> <span class="at">-i</span> /path/to/your/input_file.bam</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>To submit the script to your SLURM scheduler, use:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">sbatch</span> your_script.sh</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 
 
+</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">

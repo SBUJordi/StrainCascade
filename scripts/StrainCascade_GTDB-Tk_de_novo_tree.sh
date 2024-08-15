@@ -69,7 +69,7 @@ if [ -f "$phylum_file" ]; then
         echo "Warning: Phylum file is empty. Skipping this module (GTDB-Tk de novo tree) and continuing with the next script in the pipeline."
         exit 0
     else
-        echo "Phylum file found. Continuing with Skipping this module (GTDB-Tk de novo tree)."
+        echo "Phylum file found. Continuing with this module (GTDB-Tk de novo tree)."
     fi
 else
     echo "Warning: Phylum file not found. Skipping this module (GTDB-Tk de novo tree) and continuing with the next script in the pipeline."
@@ -109,7 +109,9 @@ apptainer exec \
                       --prefix \"${sample_name}_de_novo_tree_gtdbtk\" \
                       --extension $assembly_extension \
                       --cpus $threads \
-                      --bacteria" 2>&1
+                      --bacteria
+                      exit \$?  # Exit with the status of gtdbtk de_novo_wf
+                      " 2>&1
 
 # Check exit status of GTDB-Tk de_novo_wf
 if [ $? -ne 0 ]; then
