@@ -4,7 +4,6 @@ Add short reads (illumnia)
 
 Add logging to Circlator
 
-Phage module
 Circos for circular gene visualisation (https://circos.ca/software/download/circos/)
 
 Phage software: comparison paper: https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2023.1078760/full
@@ -12,6 +11,9 @@ best combo in my estimation:
 https://github.com/jiarong/VirSorter2
 https://onlinelibrary.wiley.com/doi/10.1007/s40484-019-0187-4
 
+remove tha all_modules() from the straincascade and move this part to the run_configuration_handler
+
+Change 00_sequencing_reads -> 00_input_file
 
 check licenses
 
@@ -20,8 +22,14 @@ include PlasmidFinder database in container (38Mb)
 add file that notes all info about the run: software versions & database versions
 
 
+viromics course:
+https://mgxlab.github.io/Viromics-Workshop-MGX/
+
+
 database installations: The md5sum command should be checked for compatibility with the system.
 
+
+remove "_abs" from dirs
 
 
 Racon iternations and Pilon iterations: Correct assembly errors (or “polish”) using racon and/or Pilon. Both racon and Pilon take the contigs and the reads mapped to those contigs, and look for discrepancies between the assembly and the majority of the reads. Where there is a discrepancy, racon or pilon will correct the assembly if the majority of the reads call for that. Racon is for long reads (PacBio or Nanopore) and Pilon is for shorter reads (Illumina or Ion Torrent). Once the assembly has been corrected with the reads, it is still possible to do another iteration to further improve the assembly, but each one takes time.

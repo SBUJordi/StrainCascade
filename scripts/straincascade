@@ -18,15 +18,19 @@ else
 fi
 
 # Default values
-output_directory=$(get_absolute_path $(pwd))
+input=""
+assembly_input=""
+output_directory=$(get_absolute_path "$(pwd)")
 sequencing_type="pacbio-hifi"
 threads=32
 locus_tag="automatic"
-modules_to_run="all"
 result_type="main"
-force_overwrite="yes" # Default force overwrite to yes
+force_overwrite="yes"
 version="1.0.0"
-databases_directory="$(dirname "$script_dir")/databases" # Default databases_directory directory
+databases_directory="$(dirname "$script_dir")/databases"
+apptainer_images_dir="$(dirname "$script_dir")/apptainer_images"
+execution_mode=""
+bundle=""
 
 # Valid sequencing types
 valid_seq_types=("pacbio-raw" "pacbio-corr" "pacbio-hifi" "nano-raw" "nano-corr" "nano-hq")
@@ -36,11 +40,11 @@ valid_result_types=("all" "main" "R")
 
 # All available modules
 all_modules=(
+  "StrainCascade_Canu_correct_trim.sh"
   "StrainCascade_LJA_assembly.sh"
   "StrainCascade_SPAdes_assembly.sh"
   "StrainCascade_Canu_assembly.sh"
   "StrainCascade_Flye_assembly.sh"
-  #"StrainCascade_CISA_merging.sh"
   "StrainCascade_assembly_evaluation1.sh"
   "StrainCascade_MAC2_assembly_merging.sh"
   "StrainCascade_assembly_evaluation2.sh"
@@ -61,27 +65,9 @@ all_modules=(
   "StrainCascade_IslandPath_genomic_islands_identification.sh"
   "StrainCascade_VirSorter2_phage_identification.sh"
   "StrainCascade_DeepVirFinder_phage_identification.sh"
-  "StrainCascade_result_types_summary.sh"
-  "StrainCascade_result_type_processing.sh"
+  "StrainCascade_run_summary"
+  "StrainCascade_data_integration.sh"
 )
-
-# Function to print usage
-usage() {
-    echo "Usage: $0 -i input [-o output_directory] [-s seq_type] [-t threads] [-r result_type] [-m modules] [-f force_overwrite] [-d databases_directory] [-l locus_tag] [-h] [-v]"
-    echo "  -i  input               Input file or directory containting files (mandatory). Valid file formats include: .fasta, .fa, .fastq, .fastq.gz, .fna, and .bam"
-    echo "  -o  output_directory    Output directory (default: current working directory)"
-    echo "  -s  seq_type            Sequence type (default: pacbio-hifi). Options are: pacbio-raw | pacbio-corr | pacbio-hifi | nano-raw | nano-corr | nano-hq"
-    echo "  -t  threads             Number of threads (default: 32)"
-    echo "  -m  modules             Modules to run (default: all). Use comma-separated (or space-seperated) values for multiple modules."
-    echo "  -r  result_type         Result type (default: main). Options are: all, main, R"
-    echo "  -f  force_overwrite     Force overwrite existing results (default: yes). Options are: yes | no. (no does not always guarantee that nothing will be overwritten)"
-    echo "  -d  databases_directory           Path to databases directory (default: StrainCascade/databases)"
-    echo "                          Note: Custom database locations must maintain the same structure and naming of subdirectories/files as the default installation."
-    echo "  -l  locus_tag           Specify your own locus tag for genome annotation (default: automatically generated); must contain between 3 and 12 alphanumeric uppercase characters and start with a letter"
-    echo "  -h                      Show this help message and exit"
-    echo "  -v                      Show version information and exit"
-    exit 1
-}
 
 # Function to print version
 version() {
@@ -94,7 +80,7 @@ contains() {
     local value=$1
     shift
     for item; do
-        [[ $item == $value ]] && return 0
+        [[ $item == "$value" ]] && return 0
     done
     return 1
 }
@@ -103,14 +89,14 @@ contains() {
 is_valid_module() {
     local module=$1
     for valid_module in "${all_modules[@]}"; do
-        if [[ $valid_module == $module ]]; then
+        if [[ $valid_module == "$module" ]]; then
             return 0
         fi
     done
     return 1
 }
 
-# Function to check if file is a FASTA file
+# Function to check if file is a FASTA or BAM file
 is_fasta_or_bam_file() {
     local file=$1
     if [[ $file == *.fasta || $file == *.fa || $file == *.fastq || $file == *.fastq.gz || $file == *.fna || $file == *.bam ]]; then
@@ -120,22 +106,31 @@ is_fasta_or_bam_file() {
     fi
 }
 
-# Function to handle input directory
+# Function to handle input
 handle_input() {
     local input=$1
+    local input_type=$2
     if [[ -f $input ]]; then
         echo $input
     elif [[ -d $input ]]; then
         local files=()
         for f in "$input"/*; do
-            if is_fasta_or_bam_file "$f"; then
-                files+=("$f")
+            if [[ $input_type == "assembly" ]]; then
+                if [[ $f == *.fasta || $f == *.fa || $f == *.fna ]]; then
+                    files+=("$f")
+                fi
             else
-                echo "Warning: Uncommon file extension detected: $f"
+                if is_fasta_or_bam_file "$f"; then
+                    files+=("$f")
+                fi
             fi
         done
         if [[ ${#files[@]} -eq 0 ]]; then
-            echo "Warning: No FASTA or BAM files found in the directory."
+            if [[ $input_type == "assembly" ]]; then
+                echo "Warning: No assembly files found in the directory."
+            else
+                echo "Warning: No FASTA or BAM files found in the directory."
+            fi
         fi
         echo "${files[@]}"
     else
@@ -145,38 +140,121 @@ handle_input() {
 }
 
 # Parse command line arguments
-while getopts "i:o:s:t:m:r:f:d:l:hv" opt; do
+while getopts "i:a:o:s:t:e:b:r:f:d:l:hv" opt; do
     case "$opt" in
         i) input=$OPTARG ;;
+        a) assembly_input=$OPTARG ;;
         o) output_directory=$OPTARG ;;
         s) sequencing_type=$OPTARG ;;
         t) threads=$OPTARG ;;
-        m) modules_to_run=$OPTARG ;;
+        e)
+            if [[ $OPTARG == custom* ]]; then
+                # Remove 'custom:' or 'custom' prefix and trim leading/trailing spaces
+                normalized_arg=$(echo "$OPTARG" | sed -e 's/^custom:*\s*//;s/^\s*//;s/\s*$//')
+                execution_mode="custom"
+                custom_args=$normalized_arg
+            else
+                execution_mode=$OPTARG
+            fi
+            ;;
+        b) bundle=$OPTARG ;;
         r) result_type=$OPTARG ;;
         f) force_overwrite=$OPTARG ;;
         d) databases_directory=$OPTARG ;;
         l) locus_tag=$OPTARG ;;
-        h) usage ;;
+        h) help ;;
         v) version ;;
         *) usage ;;
     esac
 done
+shift $((OPTIND-1))
 
-echo "Initiating StrainCascade execution with the following parameters:"
-echo "Input files: $input_files"
-echo "Output directory: $output_directory"
-echo "Sequencing type: $sequencing_type"
-echo "Threads: $threads"
-echo "Selected modules: $selected_modules"
-echo "Result type: $result_type"
-echo "Force overwrite: $force_overwrite"
-echo "Databases directory: $databases_directory"
-echo "Locus tag: $locus_tag"
-
-# Check for mandatory arguments
-if [[ -z $input ]]; then
+# Check for mutually exclusive -i and -a arguments
+if [[ -n $input && -n $assembly_input ]]; then
+    echo "Error: -i and -a are mutually exclusive. Please provide either input files (-i) or assembly files (-a), not both." >&2
     usage
 fi
+
+if [[ -z $input && -z $assembly_input ]]; then
+    echo "Error: Either -i or -a must be provided." >&2
+    usage
+fi
+
+# Determine input type
+input_type="reads"
+if [[ -n $assembly_input ]]; then
+    input_type="assembly"
+    input=$assembly_input
+fi
+
+# Check for mutually exclusive options
+if [[ -n $bundle && -n $execution_mode ]]; then
+    echo "Error: Bundle option (-b) cannot be used with execution mode (-e)" >&2
+    exit 1
+fi
+
+# Set default execution mode if neither -e nor -b is specified
+if [[ -z $bundle && -z $execution_mode ]]; then
+    execution_mode="standard"
+fi
+
+# Validate execution_mode
+valid_modes=("minimal" "efficient" "standard" "comprehensive" "custom")
+if [[ -n $execution_mode && ! " ${valid_modes[*]} " =~ (^|[[:space:]])"$execution_mode"($|[[:space:]]) ]]; then
+    echo "Error: Invalid execution mode. Valid options are: ${valid_modes[*]}" >&2
+    exit 1
+fi
+
+# Handle custom execution mode
+if [[ $execution_mode == "custom" ]]; then
+    if [[ -z $custom_args ]]; then
+        echo "Error: Custom execution mode requires arguments." >&2
+        exit 1
+    fi
+fi
+    
+    # List all matching .sif files and store them in an array
+    readarray -t matching_files < <(find "$apptainer_images_dir" -name 'python_3.12.4*.sif' -print)
+
+    # Check the number of matching files
+    if [ ${#matching_files[@]} -eq 0 ]; then
+        echo "No matching .sif files found in $apptainer_images_dir." >&2
+        exit 1
+    elif [ ${#matching_files[@]} -gt 1 ]; then
+        echo "Warning: Multiple matching .sif files found. Using the first match: ${matching_files[0]}"
+    fi
+
+# Proceed with the first match
+straincascade_python=${matching_files[0]}
+
+if ! outputs=$(apptainer exec --bind "$script_dir:/scripts" \
+                              "$straincascade_python" \
+                              /bin/bash -c "python /scripts/StrainCascade_run_configuration_handler.py '$execution_mode' '$bundle' '$custom_args'"); then
+    echo "Error: Failed to process execution mode or bundle." >&2
+    exit 1
+fi
+
+if [ -z "$outputs" ]; then
+    echo "Error: No output received from Python script (StrainCascade_run_configuration_handler.py)." >&2
+    exit 1
+fi
+
+# Separate the outputs by line breaks into an array
+IFS=$'\n' read -rd '' -a outputs <<< "$outputs"
+
+# Assign the outputs to separate variables
+info_output="${outputs[0]}"
+selected_modules="${outputs[1]}"
+human_readable_output="${outputs[2]}"
+    
+# Validate the returned modules
+for module in $selected_modules; do
+    if ! is_valid_module "$module"; then
+        echo "Error: Invalid module '$module' returned from custom execution mode." >&2
+        exit 1
+    fi
+done
+
 
 # Check if output directory exists and is writable
 if [[ ! -d $output_directory ]]; then
@@ -228,49 +306,43 @@ if [[ $locus_tag != "automatic" ]]; then
     fi
 fi
 
-# Handle input directory or file
-input_files=$(handle_input "$input")
+# Handle input
+input_files=$(handle_input "$input" "$input_type")
 if [[ -z $input_files ]]; then
     echo "Error: No valid input files found." >&2
     exit 1
 fi
 
-# Handle modules_to_run
-if [[ $modules_to_run == "all" ]]; then
-    selected_modules=$(IFS=' '; echo "${all_modules[*]}")
-else
-    # Split modules_to_run on commas or spaces
-    IFS=$'\n' read -d '' -ra module_array <<< "$(echo $modules_to_run | grep -oE '[^, ]+')"
-    
-    selected_modules=""
-    invalid_modules=()
-    for module in "${module_array[@]}"; do
-        module=$(echo "$module" | xargs)  # Trim spaces
-        if is_valid_module "$module"; then
-            selected_modules+="$module "
-        else
-            invalid_modules+=("$module")
-        fi
-    done
-    selected_modules="${selected_modules% }"  # Remove trailing space
-    
-    # Check for invalid modules and report them
-    if [ ${#invalid_modules[@]} -ne 0 ]; then
-        echo "Error: Invalid module(s): ${invalid_modules[*]}. Valid options are: ${all_modules[*]}"
-        exit 1
-    fi
-fi
+echo "Initiating StrainCascade version ${version} execution with the following parameters:"
+echo "Input type: $input_type"
+echo "Input files: $input"
+echo "Sequencing type: $sequencing_type"
+echo "Threads: $threads"
+echo "Run configuration:"
+echo "$info_output" | tr ',' '\n'
+echo "Selected modules:"
+echo "$human_readable_output" | tr ',' '\n' | sed 's/^/- /'
+echo "Result type: $result_type"
+echo "Force overwrite: $force_overwrite"
+echo "Output directory: $output_directory"
+echo "Databases directory: $databases_directory"
+echo "Locus tag: $locus_tag"
 
 # Iterate over input files and run the pipeline
 for input_file in $input_files; do
     bash StrainCascade_pipeline_wrapper.sh \
+        "$(get_absolute_path "$script_dir")" \
+        "$(get_absolute_path "$utils_file")" \
         "$(get_absolute_path "$input_file")" \
         "$(get_absolute_path "$output_directory")" \
+        "$(get_absolute_path "$databases_directory")" \
+        "$(get_absolute_path "$apptainer_images_dir")" \
         "$sequencing_type" \
+        "$input_type" \
         "$threads" \
         "$selected_modules" \
         "$result_type" \
         "$force_overwrite" \
-        "$(get_absolute_path "$databases_directory")" \
-        "$locus_tag"
+        "$locus_tag" \
+        "$version"
 done

@@ -1,0 +1,10 @@
+{
+    "github.copilot.enable": {
+        "shell": true,
+        "quarto": true,
+        "R": true,
+        "pyhton": true
+    },
+    "github.copilot.chat.scopeSelection": true,
+    "github.copilot.preferredAccount": "SBUJordi"
+}

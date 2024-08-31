@@ -4,31 +4,25 @@
 # Author: Sebastian Bruno Ulrich Jordi
 
 # Check for the correct number of command line arguments
-if [ "$#" -ne 11 ]; then
-    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <output_dir> <sample_name> <threads> <genome_assembly_main_abs> <genome_annotation_main_abs> <databases_dir> <locus_tag> <force_overwrite>"
+if [ "$#" -ne 12 ]; then
+    echo "Usage: $0 <script_dir> <logs_dir> <utils_file> <apptainer_images_dir> <output_dir> <sample_name> <threads> <genome_assembly_main_abs> <genome_annotation_main_abs> <databases_dir> <locus_tag> <force_overwrite>"
     exit 1
 fi
 
 script_dir=$1
 logs_dir=$2
-apptainer_images_dir=$3
-output_dir=$4
-sample_name=$5
-threads=$6
-genome_assembly_main_abs=$7
-genome_annotation_main_abs=$8
-databases_dir=$9
-locus_tag=${10}
-force_overwrite=${11}
+utils_file=$3
+apptainer_images_dir=$4
+output_dir=$5
+sample_name=$6
+threads=$7
+genome_assembly_main_abs=$8
+genome_annotation_main_abs=$9
+databases_dir=${10}
+locus_tag=${11}
+force_overwrite=${12}
 
-# Load utils from the script directory
-utils_file="${script_dir}/utils.sh"
-if [ -f "$utils_file" ]; then
-  source "$utils_file"
-else
-  echo "Error: utils.sh not found in $script_dir"
-  exit 1
-fi
+source "$utils_file"
 
 ## Define paths and variables for this script ##
 # List all matching .sif files and store them in an array
@@ -115,10 +109,12 @@ fi
 
 # Copy the output files to genome_annotation_main_abs
 for ext in _annotation_prokka.gff _annotation_prokka.gbk _annotation_prokka.fna _annotation_prokka.faa _annotation_prokka.ffn _annotation_prokka.sqn _annotation_prokka.fsa _annotation_prokka.tbl _annotation_prokka.err _annotation_prokka.log _annotation_prokka.txt _annotation_prokka.tsv; do
-    files=$(find "$prokka_output_dir" -type f -name "*.$ext")
+    files=$(find "$prokka_output_dir" -type f -name "*$ext")
     if [ -n "$files" ]; then
-        cp $files "$genome_annotation_main_abs"
+        for file in $files; do
+            cp "$file" "$genome_annotation_main_abs"
+        done
     else
-        echo "Warning: No .$ext files found in $prokka_output_dir"
+        echo "Warning: No $ext files found in $prokka_output_dir"
     fi
 done

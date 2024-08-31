@@ -4,26 +4,20 @@
 # Author: Sebastian Bruno Ulrich Jordi
 
 # Check for the correct number of command line arguments
-if [ "$#" -ne 7 ]; then
-    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <output_directory> <sample_name> <threads> <genome_assembly_main_abs>"
+if [ "$#" -ne 8 ]; then
+    echo "Usage: $0 <script_dir> <logs_dir> <utils_file> <apptainer_images_dir> <output_directory> <sample_name> <threads> <genome_assembly_main_abs>"
     exit 1
 fi
 script_dir=$1
 logs_dir=$2
-apptainer_images_dir=$3
-output_dir=$4
-sample_name=$5
-threads=$6
-genome_assembly_main_abs=$7
+utils_file=$3
+apptainer_images_dir=$4
+output_dir=$5
+sample_name=$6
+threads=$7
+genome_assembly_main_abs=$8
 
-# Load utils from the script directory
-utils_file="${script_dir}/utils.sh"
-if [ -f "$utils_file" ]; then
-  source "$utils_file"
-else
-  echo "Error: utils.sh not found in $script_dir"
-  exit 1
-fi
+source "$utils_file"
 
 ## Define paths and variables for this script ##
 # List all matching .sif files and store them in an array
@@ -116,26 +110,40 @@ else
 fi
 
 # Find the original assembly file that matches the pattern
-for assembly in $(find "$genome_assembly_main_abs" -type f -name "*${best_assembly}*")
-do
+find "$genome_assembly_main_abs" -type f -name "*${best_assembly}*" | while read -r assembly; do
   if [ -f "$assembly" ]; then
     # Copy the assembly file to the output directory with a new name
     file=$(basename "$assembly")
     prefix=${file%.*}
+
+    # Rename the chosen assembly
     cp "$assembly" "${assembly_evaluation_output_dir}/${prefix}_best_ev3.fasta"
     
     # Copy the assembly file to the genome_assembly_main_abs with a new name
     cp "$assembly" "${genome_assembly_main_abs}/${prefix}_best_ev3.fasta"
 
+    # Document which assembly was chosen and renamed
+    echo -e "\n$assembly was chosen as best assembly and renamed to \"${prefix}_best_ev3.fasta\" for all further downstream analysis" >> "${assembly_evaluation_output_dir}/${sample_name}_quast_assembly_evaluation.tsv"
+    echo -e "\n$assembly was chosen as best assembly and renamed to \"${prefix}_best_ev3.fasta\" for all further downstream analysis" >> "${assembly_evaluation_output_dir}/chosen_assembly.tsv"
+
+    # Copy the evaluation summaries file to the genome_assembly_main_abs
+    cp "${assembly_evaluation_output_dir}/${sample_name}_quast_assembly_evaluation.tsv" "${genome_assembly_main_abs}/${sample_name}_quast_assembly_evaluation.tsv"
+    cp "${assembly_evaluation_output_dir}/chosen_assembly.tsv" "${genome_assembly_main_abs}/chosen_assembly.tsv"
+
+    # Copy the detailed quast output of the chosen assembly and rename the directory
+    dir=$(find "$assembly_evaluation_output_dir" -type d -name "*${prefix}_quast_output*" -print -quit)
+    if [[ -n "$dir" ]]; then
+      cp -r "$dir" "$genome_assembly_main_abs/detailed_quast_output_of_chosen_assembly"
+    else
+      echo "No directory found matching the pattern *${prefix}_quast_output*"
+    fi
+
+    echo "Reevaluation (III) complete. Best re-evaluated assembly: $best_assembly --renamed to--> ${prefix}_best_ev3.fasta"
+    log "$logs_dir" "Reevaluation (III) complete. Best re-evaluated assembly: $best_assembly --renamed to--> ${prefix}_best_ev3.fasta"
+
     break  # Break the loop as soon as the file is found and copied
   fi
 done
-
-echo "Reevaluation (III) complete. Best reevaluated assembly: ${prefix}_best_ev3.fasta"
-
-# Copy the evaluation summary file to the genome_assembly_main_abs
-cp "${assembly_evaluation_output_dir}/${sample_name}_quast_assembly_evaluation.tsv" "${genome_assembly_main_abs}/${sample_name}_quast_assembly_evaluation.tsv"
-
 
 ## Clean up the genome_assembly_main_abs 
 # Gather all .fasta files in the specified directory
@@ -178,7 +186,14 @@ fi
 
 # Remove files not in the keep list
 for file in "${fasta_files[@]}"; do
-  if [[ ! " ${keep_files[@]} " =~ " ${file} " ]]; then
+  keep=false
+  for keep_file in "${keep_files[@]}"; do
+    if [[ "$file" == "$keep_file" ]]; then
+      keep=true
+      break
+    fi
+  done
+  if [[ "$keep" == false ]]; then
     echo "Removing $file"
     rm "$file"
   fi

@@ -4,29 +4,23 @@
 # Author: Sebastian Bruno Ulrich Jordi
 
 # Check for the correct number of command line arguments
-if [ "$#" -ne 9 ]; then
-    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <output_dir> <sample_name> <threads> <genome_annotation_main_abs> <functional_analysis_main_abs> <databases_dir>"
+if [ "$#" -ne 10 ]; then
+    echo "Usage: $0 <script_dir> <logs_dir> <utils_file> <apptainer_images_dir> <output_dir> <sample_name> <threads> <genome_annotation_main_abs> <functional_analysis_main_abs> <databases_dir>"
     exit 1
 fi
 
 script_dir=$1
 logs_dir=$2
-apptainer_images_dir=$3
-output_dir=$4
-sample_name=$5
-threads=$6
-genome_annotation_main_abs=$7
-functional_analysis_main_abs=$8
-databases_dir=$9
+utils_file=$3
+apptainer_images_dir=$4
+output_dir=$5
+sample_name=$6
+threads=$7
+genome_annotation_main_abs=$8
+functional_analysis_main_abs=$9
+databases_dir=${10}
 
-# Load utils from the script directory
-utils_file="${script_dir}/utils.sh"
-if [ -f "$utils_file" ]; then
-  source "$utils_file"
-else
-  echo "Error: utils.sh not found in $script_dir"
-  exit 1
-fi
+source "$utils_file"
 
 ## Define paths and variables for this script ##
 # List all matching .sif files and store them in an array
@@ -125,6 +119,12 @@ find "$microbeannotator_output_dir" -mindepth 1 -type d | while read -r dir; do
     mv "$dir" "${dir}_microbeannotator"
 done
 
+
+# Rename directories
+find "$microbeannotator_output_dir" -mindepth 1 -type d | while read -r dir; do
+    mv "$dir" "${dir}_microbeannotator"
+done
+
 # Replace all double underscores with single underscores in filenames
 find "$microbeannotator_output_dir" -name '*__*' | while read -r file; do
     new_file=$(echo "$file" | sed 's/__/_/g')
@@ -132,7 +132,7 @@ find "$microbeannotator_output_dir" -name '*__*' | while read -r file; do
 done
 
 # Copy specific files to genome_annotation_main_abs and functional_analysis_main_abs
-output_files=$(find "$microbeannotator_output_dir" -mindepth 1 \( -name "*kofam*" -o -name "*.annot" -o -name "*.ko" \) -type f)
+output_files=$(find "$microbeannotator_output_dir" -mindepth 1 \( -name "*microbeannotator.faa.annot" \) -type f)
 metabolic_files=$(find "$microbeannotator_output_dir" -mindepth 1 -name "metabolic_summary*" -type f)
 
 if [ -n "$output_files" ]; then

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# StrainCascade_input_file_handler.sh - Version 1.0.1
+# StrainCascade_input_file_handler.sh - Version 1.2.0
 # Author: Sebastian Bruno Ulrich Jordi
 
-if [ "$#" -ne 6 ]; then
-    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <input_file> <output_dir> <sequencing_reads_main_abs>"
+if [ "$#" -ne 8 ]; then
+    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <input_file> <output_dir> <sequencing_reads_main_abs> <genome_assembly_main_abs> <input_type>"
     exit 1
 fi
 
@@ -14,6 +14,8 @@ apptainer_images_dir=$3
 input_file=$4
 output_dir=$5
 sequencing_reads_main_abs=$6
+genome_assembly_main_abs=$7
+input_type=$8
 
 # Load utils from the script directory
 utils_file="${script_dir}/utils.sh"
@@ -53,34 +55,49 @@ if [ -n "$input_file" ]; then
         extension="fastq.gz"
     fi
 
-    case "$extension" in
-    fasta|fa|fna)
-        # If it's already FASTA but doesn't end with .fasta, rename it
-        if [[ "$input_file" != *.fasta ]]; then
-            mv "$input_file" "${dir}/${filename}.fasta"
-            input_file="${dir}/${filename}.fasta"
-        fi
-        ;;
-    fastq|fastq.gz|bam)
-        if [ "$extension" = "bam" ]; then
-            bam_file="$input_file"
-        fi
-        
-        # Convert to FASTA
-        apptainer exec \
-            --bind "$dir":/mnt/input \
-            "$straincascade_genome_assembly" \
-            /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
-                        conda activate tools_env && \
-                        samtools fasta /mnt/input/$base > /mnt/input/${filename}.fasta"
-        
-        input_file="${dir}/${filename}.fasta"
+    if [ "$input_type" == "assembly" ]; then
+        case "$extension" in
+        fasta|fa|fna)
+            # Copy the assembly file to the genome_assembly_main_abs directory with .fasta extension
+            cp "$input_file" "$genome_assembly_main_abs/${filename}.fasta"
+            input_file="$genome_assembly_main_abs/${filename}.fasta"
+            ;;
+        *)
+            log "$logs_dir" "Input_file_handler.log" "Error: Unsupported assembly file extension. Expected .fasta, .fa, or .fna"
+            exit 1
+            ;;
+        esac
+    else
+        case "$extension" in
+        fasta|fa|fna)
+            # Copy the file to the sequencing_reads_main_abs directory with .fasta extension
+            cp "$input_file" "$sequencing_reads_main_abs/${filename}.fasta"
+            input_file="$sequencing_reads_main_abs/${filename}.fasta"
+            ;;
+        fastq|fastq.gz|bam)
+            if [ "$extension" = "bam" ]; then
+                bam_file="$input_file"
+                # Copy BAM file to sequencing_reads_main_abs
+                cp "$input_file" "$sequencing_reads_main_abs/$base"
+            else
+                # Copy FASTQ file to sequencing_reads_main_abs
+                cp "$input_file" "$sequencing_reads_main_abs/$base"
+            fi
+            
+            # Convert to FASTA
+            apptainer exec \
+                --bind "$sequencing_reads_main_abs":/mnt/input \
+                "$straincascade_genome_assembly" \
+                /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
+                            conda activate tools_env && \
+                            samtools fasta /mnt/input/$base > /mnt/input/${filename}.fasta"
+            
+            input_file="$sequencing_reads_main_abs/${filename}.fasta"
             
             # Extract BAM header information if it's a BAM file
             if [ "$extension" = "bam" ]; then
                 apptainer exec \
-                    --bind "$dir":/mnt/input \
-                    --bind "$sequencing_reads_main_abs":/mnt/output \
+                    --bind "$sequencing_reads_main_abs":/mnt/input \
                     "$straincascade_genome_assembly" \
                     /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
                                 conda activate tools_env && \
@@ -99,15 +116,16 @@ if [ -n "$input_file" ]; then
                                             }
                                         }
                                     }
-                                }' > /mnt/output/${filename}_bam_info.txt) || \
-                                echo \"Error: Failed to extract BAM file information\" > /mnt/output/${filename}_bam_info.txt"
+                                }' > /mnt/input/${filename}_bam_info.txt) || \
+                                echo \"Error: Failed to extract BAM file information\" > /mnt/input/${filename}_bam_info.txt"
             fi
             ;;
         *)
             log "$logs_dir" "Input_file_handler.log" "Error: Unsupported file extension"
             exit 1
             ;;
-    esac
+        esac
+    fi
 else
     log "$logs_dir" "Input_file_handler.log" "Error: No input file identified"
     exit 1

@@ -3,29 +3,23 @@
 # StrainCascade_DeepVirFinder_phage_identification.sh - Version 1.0.0
 # Author: Sebastian Bruno Ulrich Jordi
 
-if [ "$#" -ne 9 ]; then
-    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <input_file> <output_dir> <sample_name> <threads> <genome_annotation_main_abs> <functional_analysis_main_abs>"
+if [ "$#" -ne 10 ]; then
+    echo "Usage: $0 <script_dir> <logs_dir> <utils_file> <apptainer_images_dir> <input_file> <output_dir> <sample_name> <threads> <genome_annotation_main_abs> <functional_analysis_main_abs>"
     exit 1
 fi
 
 script_dir=$1
 logs_dir=$2
-apptainer_images_dir=$3
-input_file=$4
-output_dir=$5
-sample_name=$6
-threads=$7
-genome_assembly_main_abs=$8
-functional_analysis_main_abs=$9
+utils_file=$3
+apptainer_images_dir=$4
+input_file=$5
+output_dir=$6
+sample_name=$7
+threads=$8
+genome_assembly_main_abs=$9
+functional_analysis_main_abs=${10}
 
-# Load utils
-utils_file="${script_dir}/utils.sh"
-if [ -f "$utils_file" ]; then
-  source "$utils_file"
-else
-  echo "Error: utils.sh not found in $script_dir"
-  exit 1
-fi
+source "$utils_file"
 
 # Define paths and variables
 matching_files=($(ls "$apptainer_images_dir"/straincascade_phage_detection*.sif 2> /dev/null))
@@ -39,6 +33,8 @@ fi
 
 straincascade_phage_detection=${matching_files[0]}
 
+echo "Using $input_file for DeepVirFind detection."
+
 # Create output directory
 deepvirfinder_output_dir="$output_dir/DeepVirFinder_phage_identification_results"
 create_directory "$deepvirfinder_output_dir"  
@@ -49,7 +45,7 @@ if [ -z "$analysis_assembly_file" ]; then
     echo "Error: No assembly files found. Skipping this module (DeepVirFinder phage identification) and continuing with the next script in the pipeline."
     exit 0
 else
-    echo "Using $analysis_assembly_file for DeepVirFinder."
+    echo "Using $analysis_assembly_file for alingment."
 fi
 
 # Log start time
