@@ -4,32 +4,26 @@
 # Author: Sebastian Bruno Ulrich Jordi
 
 # Check for the correct number of command line arguments
-if [ "$#" -ne 12 ]; then
-    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <output_dir> <sample_name> <threads> <genome_assembly_main_abs> <taxonomic_classification_main_abs> <genome_annotation_main_abs> <databases_dir> <locus_tag> <force_overwrite>"
+if [ "$#" -ne 13 ]; then
+    echo "Usage: $0 <script_dir> <logs_dir> <utils_file> <apptainer_images_dir> <output_dir> <sample_name> <threads> <genome_assembly_main_abs> <taxonomic_classification_main_abs> <genome_annotation_main_abs> <databases_dir> <locus_tag> <force_overwrite>"
     exit 1
 fi
 
 script_dir=$1
 logs_dir=$2
-apptainer_images_dir=$3
-output_dir=$4
-sample_name=$5
-threads=$6
-genome_assembly_main_abs=$7
-taxonomic_classification_main_abs=$8
-genome_annotation_main_abs=$9
-databases_dir=${10}
-locus_tag=${11}
-force_overwrite=${12}
+utils_file=$3
+apptainer_images_dir=$4
+output_dir=$5
+sample_name=$6
+threads=$7
+genome_assembly_main_abs=$8
+taxonomic_classification_main_abs=$9
+genome_annotation_main_abs=${10}
+databases_dir=${11}
+locus_tag=${12}
+force_overwrite=${13}
 
-# Load utils from the script directory
-utils_file="${script_dir}/utils.sh"
-if [ -f "$utils_file" ]; then
-  source "$utils_file"
-else
-  echo "Error: utils.sh not found in $script_dir"
-  exit 1
-fi
+source "$utils_file"
 
 ## Define paths and variables for this script ##
 # List all matching .sif files and store them in an array
@@ -135,10 +129,12 @@ fi
 
 # Copy the output files to genome_annotation_main_abs
 for ext in annotation_bakta.tsv annotation_bakta.ffn annotation_bakta.faa annotation_bakta.gbff annotation_bakta.png annotation_bakta.svg; do
-    files=$(find "$bakta_output_dir" -type f -name "*.$ext")
+    files=$(find "$bakta_output_dir" -type f -name "*$ext")
     if [ -n "$files" ]; then
-        cp $files "$genome_annotation_main_abs"
+        for file in $files; do
+            cp "$file" "$genome_annotation_main_abs"
+        done
     else
-        echo "Warning: No .$ext files found in $bakta_output_dir"
+        echo "Warning: No $ext files found in $bakta_output_dir"
     fi
 done

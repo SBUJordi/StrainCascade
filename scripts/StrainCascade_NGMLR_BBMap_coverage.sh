@@ -4,20 +4,21 @@
 # Author: Sebastian Bruno Ulrich Jordi
 
 # Check for the correct number of command line arguments
-if [ "$#" -ne 9 ]; then
-    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <input_file> <output_dir> <sample_name> <sequencing_type> <threads> <genome_assembly_main_abs>"
+if [ "$#" -ne 10 ]; then
+    echo "Usage: $0 <script_dir> <logs_dir> <utils_file> <apptainer_images_dir> <input_file> <output_dir> <sample_name> <sequencing_type> <threads> <genome_assembly_main_abs>"
     exit 1
 fi
 
 script_dir=$1
 logs_dir=$2
-apptainer_images_dir=$3
-input_file=$4
-output_dir=$5
-sample_name=$6
-sequencing_type=$7
-threads=$8
-genome_assembly_main_abs=$9
+utils_file=$3
+apptainer_images_dir=$4
+input_file=$5
+output_dir=$6
+sample_name=$7
+sequencing_type=$8
+threads=$9
+genome_assembly_main_abs=${10}
 
 # Check if sequencing type contains or is the pattern "pacbio" or "nano"; this covers all sequencing types supported by StrainCascade
 if [[ "$sequencing_type" == *"pacbio"* ]]; then
@@ -30,14 +31,7 @@ else
     exit 0  # Exit gracefully, allowing the pipeline to continue
 fi
 
-# Load utils from the script directory
-utils_file="${script_dir}/utils.sh"
-if [ -f "$utils_file" ]; then
-  source "$utils_file"
-else
-  echo "Error: utils.sh not found in $script_dir"
-  exit 1
-fi
+source "$utils_file"
 
 ## Define paths and variables for this script ##
 # List all matching .sif files and store them in an array
@@ -154,3 +148,7 @@ if [ -n "$coverage_file" ]; then
 else
     echo "Error: No _coverage.txt file found in $ngmlr_bbmap_output_dir"
 fi
+
+# Remove all files ending with .ngm from genome_assembly_main_abs
+rm -f "$genome_assembly_main_abs"/*.ngm
+echo "All .ngm files have been removed from $genome_assembly_main_abs"

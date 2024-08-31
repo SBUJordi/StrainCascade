@@ -5,36 +5,30 @@
 
 ## External inputs ##
 # Check for the correct number of command line arguments
-if [ "$#" -ne 9 ]; then
-    echo "Usage: $0 <script_dir> <logs_dir> <apptainer_images_dir> <input_file> <output_dir> <sample_name> <genome_assembly_main_abs>" "<threads>" "<sequencing_type>"
+if [ "$#" -ne 10 ]; then
+    echo "Usage: $0 <script_dir> <logs_dir> <utils_file> <apptainer_images_dir> <input_file> <output_dir> <sample_name> <genome_assembly_main_abs>" "<threads>" "<sequencing_type>"
     exit 1
 fi
 
 # Assign the command line arguments to named variables
 script_dir=$1
 logs_dir=$2
-apptainer_images_dir=$3
-input_file=$4
-output_dir=$5
-sample_name=$6
-sequencing_type=$7
-threads=$8
-genome_assembly_main_abs=$9
+utils_file=$3
+apptainer_images_dir=$4
+input_file=$5
+output_dir=$6
+sample_name=$7
+sequencing_type=$8
+threads=$9
+genome_assembly_main_abs=${10}
+
+source "$utils_file"
 
 # Check if sequencing type is not "pacbio-hifi"
 if [ "$sequencing_type" != "pacbio-hifi" ]; then
     log "$logs_dir" "LJA_assembly.log" "Skipping La Jolla Assembler due to incompatible sequencing type: $sequencing_type. La Jolla Assembler requires 'pacbio-hifi'."
     echo "Skipping due to incompatible sequencing type: $sequencing_type. La Jolla Assembler requires 'pacbio-hifi'."
     exit 0  # Exit gracefully, allowing the pipeline to continue
-fi
-
-# Load utils from the script directory
-utils_file="${script_dir}/utils.sh"
-if [ -f "$utils_file" ]; then
-  source "$utils_file"
-else
-  echo "Error: utils.sh not found in $script_dir"
-  exit 1
 fi
 
 ## Define paths and variables for this script ##

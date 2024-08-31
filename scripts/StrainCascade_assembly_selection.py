@@ -1,4 +1,4 @@
-# StrainCascade_assembly_selection.py - Version 1.0.0
+# StrainCascade_assembly_selection.py - Version 1.0.1
 # Author: Sebastian Bruno Ulrich Jordi
 
 import pandas as pd
@@ -53,72 +53,85 @@ logger.info(df.dtypes)
 logger.info("First few rows of the DataFrame:")
 logger.info(df.head())
 
-# Exclude lines where 'Total length (>= 0 bp)' > 10000000 (implausibly large for gut bacteria (https://doi.org/10.1038/s41467-023-37396-x, Fig. 1a))
-df = df[df['Total length (>= 0 bp)'] <= 10000000]
+# Check if all assemblies have identical metrics
+if df.drop('Assembly', axis=1).nunique().eq(1).all():
+    logger.warning("All assemblies have identical metrics.")
+    chosen_assembly = df.iloc[0].to_dict()
+else:
+    # Exclude lines where 'Total length (>= 0 bp)' > 10000000 (implausibly large for gut bacteria (https://doi.org/10.1038/s41467-023-37396-x, Fig. 1a))
+    df = df[df['Total length (>= 0 bp)'] <= 10000000]
 
-# If there are no lines left, print a message and exit
-if df.empty:
-    logger.info("No assembly below 10'000'000 bp (implausible for gut bacteria; https://doi.org/10.1038/s41467-023-37396-x, Fig. 1a)")
-    exit(1)
+    # If there are no lines left, print a message and exit
+    if df.empty:
+        logger.info("No assembly below 10'000'000 bp (implausible for gut bacteria; https://doi.org/10.1038/s41467-023-37396-x, Fig. 1a)")
+        exit(1)
 
-# If there are more than two lines left, calculate the median and exclude lines with deviation >= 1.96 standard deviations
-if len(df) > 2:
-    median_assembly_length = df['Total length (>= 0 bp)'].median()
-    df['deviation_from_median_assembly_length'] = df['Total length (>= 0 bp)'] - median_assembly_length
-    std_dev = df['deviation_from_median_assembly_length'].std()
-    df = df[np.abs(df['deviation_from_median_assembly_length']) < 1.96 * std_dev]
+    # If there are more than two lines left, calculate the median and exclude lines with deviation >= 1.96 standard deviations
+    if len(df) > 2:
+        median_assembly_length = df['Total length (>= 0 bp)'].median()
+        df['deviation_from_median_assembly_length'] = df['Total length (>= 0 bp)'] - median_assembly_length
+        std_dev = df['deviation_from_median_assembly_length'].std()
+        if std_dev > 0:  # Only filter if there's actually some variation
+            df = df[np.abs(df['deviation_from_median_assembly_length']) < 1.96 * std_dev]
+        else:
+            logger.warning("All remaining assemblies have the same length. Skipping standard deviation filtering.")
 
-# Initialize variables
-equivalent_assemblies = []
-chosen_assembly = None
+    # Initialize variables
+    equivalent_assemblies = []
+    chosen_assembly = None
 
-# Iterate through the length columns in reverse order
-for col in reversed(length_columns):
-    # Calculate the ratio for each assembly, handling potential NaN values
-    df['Ratio'] = df[col].div(df['Total length (>= 0 bp)']).fillna(0)
+    # Iterate through the length columns in reverse order
+    for col in reversed(length_columns):
+        # Calculate the ratio for each assembly, handling potential NaN values
+        df['Ratio'] = df[col].div(df['Total length (>= 0 bp)']).fillna(0)
 
-    # Find the assembly with the highest ratio
-    max_ratio = df['Ratio'].max()
-    selected_assemblies = df[df['Ratio'] == max_ratio]
-
-    # If there is only one assembly, stop the process
-    if len(selected_assemblies) == 1:
-        chosen_assembly = selected_assemblies.iloc[0]
-        break
-
-    # If there are multiple assemblies, proceed to the next criteria
-    df = selected_assemblies.copy()
-
-# If there is still no single winner, apply additional criteria
-if chosen_assembly is None:
-    criteria_columns = ['# contigs', 'Largest contig', 'Total length']
-    for col in criteria_columns:
-        # Find assemblies with min/max value in the current column
-        best_value = df[col].min() if col == '# contigs' else df[col].max()
-        df = df[df[col] == best_value]
+        # Find the assembly with the highest ratio
+        max_ratio = df['Ratio'].max()
+        selected_assemblies = df[df['Ratio'] == max_ratio]
 
         # If there is only one assembly, stop the process
-        if len(df) == 1:
-            chosen_assembly = df.iloc[0]
+        if len(selected_assemblies) == 1:
+            chosen_assembly = selected_assemblies.iloc[0]
             break
 
-    # If there is still no single winner, save the DataFrame as 'equivalent_assemblies.tsv'
-    if len(df) > 1:
-        df.to_csv(os.path.join(output_dir, 'equivalent_assemblies.tsv'), sep='\t', index=False)
+        # If there are multiple assemblies, proceed to the next criteria
+        df = selected_assemblies.copy()
 
-# Check for assemblies with the '_circularised' pattern first
-circularised_assemblies = df[df['Assembly'].str.contains('_circularised')]
-if not circularised_assemblies.empty:
-    chosen_assembly = circularised_assemblies.iloc[0].to_dict()
-# Then check for assemblies with the 'best_ev2' pattern
-elif not df[df['Assembly'].str.contains('best_ev2')].empty:
-    chosen_assembly = df[df['Assembly'].str.contains('best_ev2')].iloc[0].to_dict()
-# Then check for assemblies with the 'best_ev1' pattern
-elif not df[df['Assembly'].str.contains('best_ev1')].empty:
-    chosen_assembly = df[df['Assembly'].str.contains('best_ev1')].iloc[0].to_dict()
-# If none of the patterns are found, choose the first assembly in the list
-else:
-    chosen_assembly = df.iloc[0].to_dict()
+    # If there is still no single winner, apply additional criteria
+    if chosen_assembly is None:
+        criteria_columns = ['# contigs', 'Largest contig', 'Total length']
+        for col in criteria_columns:
+            # Find assemblies with min/max value in the current column
+            best_value = df[col].min() if col == '# contigs' else df[col].max()
+            df = df[df[col] == best_value]
+
+            # If there is only one assembly, stop the process
+            if len(df) == 1:
+                chosen_assembly = df.iloc[0]
+                break
+
+        # If there is still no single winner, save the DataFrame as 'equivalent_assemblies.tsv'
+        if len(df) > 1:
+            df.to_csv(os.path.join(output_dir, 'equivalent_assemblies.tsv'), sep='\t', index=False)
+
+    # Check for assemblies with the '_circularised' pattern first
+    circularised_assemblies = df[df['Assembly'].str.contains('_circularised')]
+    if not circularised_assemblies.empty:
+        chosen_assembly = circularised_assemblies.iloc[0].to_dict()
+    # Then check for assemblies with the 'best_ev2' pattern
+    elif not df[df['Assembly'].str.contains('best_ev2')].empty:
+        chosen_assembly = df[df['Assembly'].str.contains('best_ev2')].iloc[0].to_dict()
+    # Then check for assemblies with the 'best_ev1' pattern
+    elif not df[df['Assembly'].str.contains('best_ev1')].empty:
+        chosen_assembly = df[df['Assembly'].str.contains('best_ev1')].iloc[0].to_dict()
+    # If none of the patterns are found, choose the first assembly in the list
+    else:
+        chosen_assembly = df.iloc[0].to_dict()
+
+# Ensure that a chosen assembly is always returned
+if chosen_assembly is None:
+    logger.error("No assembly could be selected. All assemblies might have been filtered out.")
+    exit(1)
 
 # Save the chosen assembly as 'chosen_assembly.tsv'
 chosen_assembly_df = pd.DataFrame([chosen_assembly])

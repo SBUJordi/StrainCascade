@@ -4,27 +4,24 @@
 # Author: Sebastian Bruno Ulrich Jordi
 
 # Check for the correct number of command line arguments
-if [ "$#" -ne 10 ]; then
-    echo "Error: Incorrect number of arguments. Skipping this module and continuing with the next script in the pipeline."
-    exit 0
+if [ "$#" -ne 11 ]; then
+    echo "Usage: $0 <script_dir> <logs_dir> <utils_file> <apptainer_images_dir> <input_file> <bam_file> <output_dir> <sample_name> <sequencing_type> <threads> <genome_assembly_main_abs>"
+    exit 1
 fi
 
 script_dir=$1
 logs_dir=$2
-apptainer_images_dir=$3
-input_file=$4
-bam_file=$5
-output_dir=$6
-sample_name=$7
-sequencing_type=$8
-threads=$9
-genome_assembly_main_abs=${10}
+utils_file=$3
+apptainer_images_dir=$4
+input_file=$5
+bam_file=$6
+output_dir=$7
+sample_name=$8
+sequencing_type=$9
+threads=${10}
+genome_assembly_main_abs=${11}
 
-# Source utils file
-if ! source "${script_dir}/utils.sh"; then
-    echo "Error: utils.sh not found in $script_dir. Skipping this module and continuing with the next script in the pipeline."
-    exit 0
-fi
+source "$utils_file"
 
 # Determine polishing tool based on sequencing type
 if [[ "$sequencing_type" == *"pacbio"* && -n "$bam_file" && "$bam_file" != "not_available" ]]; then
