@@ -1,0 +1,251 @@
+#!/bin/bash
+
+# Copyright (c) 2024-2025, University of Bern, Department for BioMedical Research, Sebastian Bruno Ulrich JORDI
+# This source code is licensed under the MIT No Attribution License (MIT-0)
+# found in the LICENSE file in the root directory of this source tree.
+
+# StrainCascade_Canu_assembly.sh
+# Description: Performs Canu genome assembly as part of StrainCascade
+
+set -euo pipefail
+
+# Function to display usage information
+show_usage() {
+    cat << EOF
+Usage: $0 <script_dir> <logs_dir> <log_name> <utils_file> <apptainer_images_dir> <input_file> 
+          <output_dir> <sample_name> <sequencing_type> <threads> <genome_assembly_main_abs> <reproducibility_mode>
+
+EOF
+    exit 1
+}
+
+# Validate input parameters
+[[ $# -eq 12 ]] || show_usage
+
+# Constants from command line arguments
+readonly SCRIPT_DIR="$1"
+readonly LOGS_DIR="$2"
+readonly LOG_NAME="$3"
+readonly UTILS_FILE="$4"
+readonly APPTAINER_DIR="$5"
+readonly INPUT_FILE="$6"
+readonly OUTPUT_DIR="$7"
+readonly SAMPLE_NAME="$8"
+readonly SEQUENCING_TYPE="$9"
+readonly INITIAL_THREADS="${10}"
+readonly GENOME_ASSEMBLY_DIR="${11}"
+readonly REPRODUCIBILITY_MODE="${12}"
+
+# Set threads based on algorithm type
+if [[ "${REPRODUCIBILITY_MODE}" == "deterministic" ]]; then
+    readonly THREADS=1
+else
+    readonly THREADS="${INITIAL_THREADS}"
+fi
+
+# Derived constants
+readonly CANU_OUTPUT_DIR="$OUTPUT_DIR/Canu_assembly_results"
+readonly MIN_VALID_GENOME_SIZE=1300000
+readonly MAX_PLAUSIBLE_GENOME_SIZE=10000000
+readonly ASSEMBLY_PREFIX="${SAMPLE_NAME}_assembly_canu"
+readonly FINAL_ASSEMBLY_NAME="${ASSEMBLY_PREFIX}.fasta"
+readonly GENOME_SIZE_FILE="$GENOME_ASSEMBLY_DIR/informed_genome_size_estimation.txt"
+readonly DEFAULT_GENOME_SIZE="4.5m"
+
+# Source utility functions
+source "$UTILS_FILE"
+
+log "$LOGS_DIR" "$LOG_NAME" "Threads set to ${THREADS} based on algorithm type ${REPRODUCIBILITY_MODE}."
+
+# Create required output directory
+create_directory "$CANU_OUTPUT_DIR"
+
+# Clean up empty FASTA files
+log "$LOGS_DIR" "$LOG_NAME" "Checking for empty FASTA files in $GENOME_ASSEMBLY_DIR"
+while IFS= read -r -d '' file; do
+    if [[ -f "$file" && ! -s "$file" ]]; then
+        log "$LOGS_DIR" "$LOG_NAME" "Removing empty file: $(basename "$file")"
+        rm "$file"
+    fi
+done < <(find "$GENOME_ASSEMBLY_DIR" -type f -name "*.fasta" -print0)
+
+# Find required Apptainer image
+readonly straincascade_genome_assembly_sif=$(find_apptainer_sif_file "$APPTAINER_DIR" 'straincascade_genome_assembly*.sif')
+
+# Determine Canu-specific sequencing type options --> all are set to -trimmed -corrected because SC1 performs trimming and correction based on sequencing_type
+readonly CANU_SEQ_TYPE=$(case "$SEQUENCING_TYPE" in
+    pacbio-raw)  echo "-trimmed -corrected -pacbio" ;;
+    pacbio-corr) echo "-trimmed -corrected -pacbio" ;;
+    pacbio-hifi) echo "-pacbio-hifi" ;;
+    nano-raw)    echo "-trimmed -corrected -nanopore" ;;
+    nano-corr|nano-hq) echo "-trimmed -corrected -nanopore" ;;
+    *)
+        log "$LOGS_DIR" "$LOG_NAME" "Error: Invalid sequencing type: $SEQUENCING_TYPE. Skipping Canu assembly."
+        exit 0
+        ;;
+esac)
+
+# Initialize assembly parameters
+genome_size="$DEFAULT_GENOME_SIZE"
+readonly ESTIMATE_GENOME_SIZE=$([[ -f "$GENOME_SIZE_FILE" ]] && echo "no" || echo "yes")
+
+# Use existing genome size if available
+if [[ -f "$GENOME_SIZE_FILE" ]]; then
+    genome_size=$(awk '{printf "%.1fm\n", $1/1000000}' "$GENOME_SIZE_FILE")
+    log "$LOGS_DIR" "$LOG_NAME" "Using pre-existing genome size estimation: $genome_size"
+fi
+
+# Create deterministic entropy source
+readonly ENTROPY_FILE="$CANU_OUTPUT_DIR/deterministic_entropy_file"
+if [[ ! -f "$ENTROPY_FILE" ]]; then
+    dd if=/dev/zero bs=1024 count=100 > "$ENTROPY_FILE"
+    log "$LOGS_DIR" "$LOG_NAME" "Deterministic entropy file created at $ENTROPY_FILE"
+fi
+
+# Main assembly execution
+log "$LOGS_DIR" "$LOG_NAME" "Running Canu Assembler for $INPUT_FILE"
+log "$LOGS_DIR" "$LOG_NAME" "Output directory: $CANU_OUTPUT_DIR"
+log "$LOGS_DIR" "$LOG_NAME" "Using $THREADS threads"
+log "$LOGS_DIR" "$LOG_NAME" "Sequencing type: $SEQUENCING_TYPE (Canu options: $CANU_SEQ_TYPE)"
+
+# Modify first Canu execution to use entropy file
+apptainer exec \
+    --bind "$(dirname "$INPUT_FILE")":/mnt/input \
+    --bind "$CANU_OUTPUT_DIR":/mnt/output \
+    --bind "$ENTROPY_FILE":/dev/random \
+    --bind "$ENTROPY_FILE":/dev/urandom \
+    "$straincascade_genome_assembly_sif" canu \
+    -p "$SAMPLE_NAME" \
+    -d /mnt/output \
+    genomeSize="$genome_size" \
+    $CANU_SEQ_TYPE /mnt/input/$(basename "$INPUT_FILE") \
+    useGrid=false \
+    cnsThreads="$THREADS" \
+    corThreads="$THREADS" \
+    redThreads="$THREADS" \
+    oeaThreads="$THREADS" \
+    batThreads="$THREADS" \
+    ovlThreads="$THREADS" \
+    mhapThreads="$THREADS" \
+    mmapThreads="$THREADS" \
+    ovbThreads="$THREADS" \
+    ovsThreads="$THREADS" \
+    cnsConcurrency="$THREADS" \
+    corConcurrency="$THREADS" \
+    redConcurrency="$THREADS" \
+    oeaConcurrency="$THREADS" \
+    batConcurrency="$THREADS" \
+    ovlConcurrency="$THREADS" \
+    mhapConcurrency="$THREADS" \
+    mmapConcurrency="$THREADS" \
+    ovbConcurrency="$THREADS" \
+    ovsConcurrency="$THREADS" || {
+        log "$LOGS_DIR" "$LOG_NAME" "Error: Canu assembly failed. Skipping Canu assembly."
+        exit 0
+    }
+
+# Process assembly output
+if [[ -f "$CANU_OUTPUT_DIR/${SAMPLE_NAME}.contigs.fasta" ]]; then
+    # Check if file is empty
+    if [[ ! -s "$CANU_OUTPUT_DIR/${SAMPLE_NAME}.contigs.fasta" ]]; then
+        log "$LOGS_DIR" "$LOG_NAME" "Warning: Empty assembly file was generated by Canu. This is indicative of assembly failure and the assembly file will not be used downstream."
+        exit 0
+    fi
+    mv "$CANU_OUTPUT_DIR/${SAMPLE_NAME}.contigs.fasta" "$CANU_OUTPUT_DIR/$FINAL_ASSEMBLY_NAME"
+    log "$LOGS_DIR" "$LOG_NAME" "Renamed assembly to $FINAL_ASSEMBLY_NAME"
+    
+    cp "$CANU_OUTPUT_DIR/$FINAL_ASSEMBLY_NAME" "$GENOME_ASSEMBLY_DIR/"
+    log "$LOGS_DIR" "$LOG_NAME" "Copied assembly to $GENOME_ASSEMBLY_DIR"
+else
+    log "$LOGS_DIR" "$LOG_NAME" "Error: Assembly file not found. Skipping Canu assembly."
+    exit 0
+fi
+
+# Perform genome size estimation if needed
+if [[ "$ESTIMATE_GENOME_SIZE" == "yes" ]]; then
+    log "$LOGS_DIR" "$LOG_NAME" "Performing genome size estimation"
+    
+    # Calculate genome size from assembly with error handling
+    if ! genome_size=$(grep -v ">" "$CANU_OUTPUT_DIR/$FINAL_ASSEMBLY_NAME" | tr -d '\n' | tr -cd 'ACGTNacgtn' | wc -c); then
+        log "$LOGS_DIR" "$LOG_NAME" "Error: Failed to calculate genome size from assembly. Skipping Canu assembly."
+        exit 0
+    fi
+    log "$LOGS_DIR" "$LOG_NAME" "Estimated genome size: $genome_size bp"
+    
+    # Validate genome size
+    if (( genome_size > MAX_PLAUSIBLE_GENOME_SIZE )); then
+        log "$LOGS_DIR" "$LOG_NAME" "Warning: Genome size $genome_size bp is implausibly large for gut bacteria \
+(https://doi.org/10.1038/s41467-023-37396-x, Fig. 1a). Continuing with Canu assembly."
+    elif (( genome_size <= MIN_VALID_GENOME_SIZE )); then
+        log "$LOGS_DIR" "$LOG_NAME" "Warning: Genome size $genome_size bp may be too small for independent cell replication \
+(https://www.science.org/doi/10.1126/science.1114057, Fig. 1). Continuing with Canu assembly."
+    else
+        log "$LOGS_DIR" "$LOG_NAME" "Genome size $genome_size bp is within expected range"
+        echo "$genome_size" > "$GENOME_SIZE_FILE"
+        
+        # Run second assembly with estimated genome size
+        genome_size="$(awk '{printf "%.1fm\n", $1/1000000}' <<< "$genome_size")"
+        log "$LOGS_DIR" "$LOG_NAME" "Running second assembly with estimated genome size: $genome_size"
+        
+        apptainer exec \
+            --bind "$(dirname "$INPUT_FILE")":/mnt/input \
+            --bind "$CANU_OUTPUT_DIR":/mnt/output \
+            --bind "$ENTROPY_FILE":/dev/random \
+            --bind "$ENTROPY_FILE":/dev/urandom \
+            "$straincascade_genome_assembly_sif" canu \
+            -p "$SAMPLE_NAME" \
+            -d /mnt/output \
+            genomeSize="$genome_size" \
+            $CANU_SEQ_TYPE /mnt/input/$(basename "$INPUT_FILE") \
+            useGrid=false \
+            cnsThreads="$THREADS" \
+            corThreads="$THREADS" \
+            redThreads="$THREADS" \
+            oeaThreads="$THREADS" \
+            batThreads="$THREADS" \
+            ovlThreads="$THREADS" \
+            mhapThreads="$THREADS" \
+            mmapThreads="$THREADS" \
+            ovbThreads="$THREADS" \
+            ovsThreads="$THREADS" \
+            cnsConcurrency="$THREADS" \
+            corConcurrency="$THREADS" \
+            redConcurrency="$THREADS" \
+            oeaConcurrency="$THREADS" \
+            batConcurrency="$THREADS" \
+            ovlConcurrency="$THREADS" \
+            mhapConcurrency="$THREADS" \
+            mmapConcurrency="$THREADS" \
+            ovbConcurrency="$THREADS" \
+            ovsConcurrency="$THREADS" || {
+                log "$LOGS_DIR" "$LOG_NAME" "Error: Second Canu assembly failed. Skipping Canu assembly."
+                exit 0
+            }
+        
+        # Process second assembly output
+        if [[ -f "$CANU_OUTPUT_DIR/${SAMPLE_NAME}.contigs.fasta" ]]; then
+            # Check if file is empty
+            if [[ ! -s "$CANU_OUTPUT_DIR/${SAMPLE_NAME}.contigs.fasta" ]]; then
+                log "$LOGS_DIR" "$LOG_NAME" "Warning: Empty assembly file was generated by second Canu run. This is indicative of assembly failure and the assembly file will not be used downstream."
+                exit 0
+            fi
+            mv "$CANU_OUTPUT_DIR/${SAMPLE_NAME}.contigs.fasta" "$CANU_OUTPUT_DIR/$FINAL_ASSEMBLY_NAME"
+            cp "$CANU_OUTPUT_DIR/$FINAL_ASSEMBLY_NAME" "$GENOME_ASSEMBLY_DIR/"
+            log "$LOGS_DIR" "$LOG_NAME" "Second assembly completed and saved"
+        else
+            log "$LOGS_DIR" "$LOG_NAME" "Error: Second assembly file not found. Skipping Canu assembly."
+            exit 0
+        fi
+    fi
+fi
+
+# Clean up empty FASTA files
+log "$LOGS_DIR" "$LOG_NAME" "Checking for empty FASTA files in $GENOME_ASSEMBLY_DIR"
+while IFS= read -r -d '' file; do
+    if [[ -f "$file" && ! -s "$file" ]]; then
+        log "$LOGS_DIR" "$LOG_NAME" "Removing empty file: $(basename "$file")"
+        rm "$file"
+    fi
+done < <(find "$GENOME_ASSEMBLY_DIR" -type f -name "*.fasta" -print0)
+
+log "$LOGS_DIR" "$LOG_NAME" "Canu assembly completed successfully"
