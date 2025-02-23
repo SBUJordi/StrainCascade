@@ -111,7 +111,7 @@ amrfinder_cmd="export TMPDIR=/tmp && mkdir -p \$TMPDIR && \
     amrfinder \
     -n /mnt/input/temp_input_assembly_AMRFinder.fasta \
     -o /mnt/output/${OUTPUT_BASE}.tsv \
-    --database $DATABASES_DIR/amrfinderplus_db/latest \
+    --database /opt/conda/envs/amrfinderplus_env/share/amrfinderplus/data/latest \
     --threads $THREADS \
     --plus \
     --mutation_all /mnt/output/${MUTATION_BASE}.tsv"
