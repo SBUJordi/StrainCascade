@@ -296,6 +296,7 @@ if (!is.null(assembly_data)) {
     )
 
   circlator_data <- safe_get('circlator_results')
+  selected_circlator_data <- NULL  # Initialize variable
   if (!is.null(circlator_data)) {  
     selected_circlator_data <- circlator_data |>
     select(
