@@ -66,7 +66,7 @@ update_scripts() {
     cd "$temp_dir"
 
     # Clone the latest version of the repository (pre-release with read-only access token)
-    if ! git clone https://REDACTED_TOKEN@github.com/SBUJordi/StrainCascade.git; then
+    if ! git clone https://github.com/SBUJordi/StrainCascade.git; then
         echo "Failed to clone the repository. Update aborted."
         cd "$current_dir"
         rm -rf "$temp_dir"
