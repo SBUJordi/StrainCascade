@@ -15,7 +15,7 @@ website:
   navbar:
     background: "#1a2a3a"
     foreground: "#e0e0e0"
-    logo: images/straincascade_logo_white.png
+    logo: images/straincascade_logo_blue.png
     title: false
     left:
       - text: "Home"
