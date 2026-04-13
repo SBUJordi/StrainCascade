@@ -96,7 +96,8 @@ find "$PLASMIDFINDER_OUTPUT_DIR" -type f -exec bash -c '
 ' bash {} +
 
 # Copy relevant files to assembly directory
-if output_files=$(find "$PLASMIDFINDER_OUTPUT_DIR" -type f \( -name "*.txt" -o -name "*.json" \)); then
+output_files=$(find "$PLASMIDFINDER_OUTPUT_DIR" -type f \( -name "*.txt" -o -name "*.json" \))
+if [[ -n "$output_files" ]]; then
     for file in $output_files; do
         cp "$file" "$GENOME_ASSEMBLY_DIR"
     done

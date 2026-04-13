@@ -4,7 +4,7 @@
 # This source code is licensed under the MIT No Attribution License (MIT-0)
 # found in the LICENSE file in the root directory of this source tree.
 
-# StrainCascade_assembly_selection_contig.py - Version 1.0.0
+# StrainCascade_assembly_selection_contig.py - Version 2.0.0
 
 import pandas as pd
 import os
@@ -90,11 +90,27 @@ else:
     mad_length = np.median(np.abs(df['Total length (>= 0 bp)'] - median_length))
     mad_factor = 1.96 * 1.4826
 
-    length_filter = (
-        (df['Total length (>= 0 bp)'] >= median_length - mad_factor * mad_length) &  # Minimum size threshold
-        (df['Total length (>= 0 bp)'] <= median_length + mad_factor * mad_length)  # Maximum size threshold
-    )
-    df = df[length_filter]
+    # Skip MAD-based filtering when assemblies are tightly clustered
+    # (MAD < 1% of median genome length). Inter-assembler variation below
+    # this threshold reflects algorithmic consensus rather than genuine
+    # outlier behaviour, and ensures that circularised assemblies are not
+    # penalised for minor length changes from overlap resolution (typically
+    # 0.1–1.5% of genome length).
+    min_mad_threshold = 0.01 * median_length
+    if mad_length > 0 and mad_length >= min_mad_threshold:
+        length_filter = (
+            (df['Total length (>= 0 bp)'] >= median_length - mad_factor * mad_length) &  # Minimum size threshold
+            (df['Total length (>= 0 bp)'] <= median_length + mad_factor * mad_length)  # Maximum size threshold
+        )
+        df = df[length_filter]
+
+        if df.empty:
+            logger.error("No assemblies remaining after MAD-based length filtering.")
+            exit(1)
+    else:
+        logger.info(f"MAD ({mad_length:.0f} bp) is below 1% of median genome length "
+                     f"({min_mad_threshold:.0f} bp). Assemblies are tightly clustered. "
+                     "Skipping MAD-based length filtering.")
 
     # Step 2: Sort by contig number (ascending) and select assemblies with lowest contig count
     min_contigs = df[contig_column].min()

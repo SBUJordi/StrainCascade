@@ -25,6 +25,8 @@ option_list <- list(
               help="Path to the input qs file (annotation_results_aggregated.qs)", metavar="FILE"),
   make_option(c("--output_dir"), type="character", default=".", 
               help="Output directory [default= %default]", metavar="DIRECTORY"),
+  make_option(c("--mapping_file"), type="character", default=NULL,
+              help="Path to contig name mapping TSV file (optional)", metavar="FILE"),
   make_option(c("--version"), type="character", default=NULL,
               help="StrainCascade version", metavar="CHARACTER")
 )
@@ -47,6 +49,75 @@ annotation_results_integrated <- qread(opt$input_file)
 # Exit if no files were imported
 if (is.null(annotation_results_integrated)) {
   stop("ERROR: No files available for import. Exiting script.")
+}
+
+# Apply contig name mapping if mapping file is provided
+# This updates contig_tag_fasta from original names to normalized names (contig_1, contig_2, etc.)
+if (!is.null(opt$mapping_file) && file.exists(opt$mapping_file)) {
+  cat("INFO: Applying contig name mapping from", opt$mapping_file, "\n")
+  
+  contig_mapping <- read.delim(opt$mapping_file, stringsAsFactors = FALSE)
+  
+  if ("contig_tag_fasta" %in% colnames(annotation_results_integrated) && 
+      nrow(contig_mapping) > 0) {
+    
+    # Create lookup from original names (and stripped names) to normalized names
+    original_to_normalized <- setNames(
+      contig_mapping$normalized_name,
+      contig_mapping$original_name
+    )
+    
+    # Also create lookup from stripped names if available
+    if ("original_name_stripped" %in% colnames(contig_mapping)) {
+      stripped_to_normalized <- setNames(
+        contig_mapping$normalized_name,
+        contig_mapping$original_name_stripped
+      )
+    } else {
+      stripped_to_normalized <- character(0)
+    }
+    
+    # Helper function to strip polishing suffixes
+    strip_polishing_suffix <- function(name) {
+      name <- gsub(" (polypolish|medaka|racon|arrow)$", "", name)
+      name <- gsub("_(polypolish|medaka|racon|arrow)$", "", name)
+      return(name)
+    }
+    
+    # Map contig names: try exact match first, then stripped match
+    original_names <- annotation_results_integrated$contig_tag_fasta
+    annotation_results_integrated$contig_tag_fasta <- sapply(original_names, function(name) {
+      if (is.na(name)) return(NA_character_)
+      if (name %in% names(original_to_normalized)) {
+        return(unname(original_to_normalized[name]))
+      }
+      stripped_name <- strip_polishing_suffix(name)
+      if (length(stripped_to_normalized) > 0 && stripped_name %in% names(stripped_to_normalized)) {
+        return(unname(stripped_to_normalized[stripped_name]))
+      }
+      # No match found - keep original (will be logged)
+      return(name)
+    }, USE.NAMES = FALSE)
+    
+    # Report mapping results
+    mapped_count <- sum(annotation_results_integrated$contig_tag_fasta %in% contig_mapping$normalized_name, na.rm = TRUE)
+    total_count <- sum(!is.na(original_names))
+    cat(sprintf("INFO: Mapped %d/%d contig names to normalized names\n", mapped_count, total_count))
+    
+    if (mapped_count < total_count) {
+      unmapped <- unique(annotation_results_integrated$contig_tag_fasta[
+        !annotation_results_integrated$contig_tag_fasta %in% contig_mapping$normalized_name & 
+        !is.na(annotation_results_integrated$contig_tag_fasta)
+      ])
+      if (length(unmapped) > 0 && length(unmapped) <= 10) {
+        cat("WARNING: Unmapped contigs:", paste(unmapped, collapse = ", "), "\n")
+      } else if (length(unmapped) > 10) {
+        cat("WARNING:", length(unmapped), "contigs could not be mapped\n")
+      }
+    }
+  }
+} else if (!is.null(opt$mapping_file)) {
+  cat("WARNING: Mapping file not found:", opt$mapping_file, "\n")
 }
 
 # Process data to assign a new locus tag
@@ -119,13 +190,20 @@ is_partial_match <- function(ec1, ec2) {
 }
 
 # Main processing of EC numbers
-# Select relevant columns
+# Select relevant columns - Include only curated EC predictions:
+# - EC_number_bakta, EC_number_prokka, EC_number_microbeannotator (database-based)
+# - EC_number_deepfri (top 3 predictions from DeepFRI by score, semicolon-separated)
+# Exclude EC_number_deepfri_all (too many low-confidence predictions per protein)
+ec_cols_for_consensus <- c("EC_number_bakta", "EC_number_prokka", 
+                           "EC_number_microbeannotator", "EC_number_deepfri")
+ec_cols_for_consensus <- ec_cols_for_consensus[ec_cols_for_consensus %in% colnames(annotation_results_integrated)]
+
 EC_number_raw_data <- annotation_results_integrated %>%
-  select(locus_tag_SC, starts_with("EC"))
+  select(locus_tag_SC, all_of(ec_cols_for_consensus))
 
 # Reshape and clean the EC numbers
 cleaned_EC_numbers <- EC_number_raw_data %>%
-  pivot_longer(cols = starts_with("EC"), names_to = "EC_column", values_to = "EC_numbers") %>%
+  pivot_longer(cols = -locus_tag_SC, names_to = "EC_column", values_to = "EC_numbers") %>%
   separate_rows(EC_numbers, sep = "; ") %>%
   filter(!is.na(EC_numbers))
 
@@ -204,13 +282,20 @@ processed_EC_numbers <- EC_number_scores %>%
   ungroup()
 
 # Remove the unprocessed EC numbers and add the processed EC numbers
+# Keep DeepFRI EC reference columns (best prediction with score, all predictions for reference)
+deepfri_ec_cols_to_keep <- c("EC_number_deepfri", "EC_number_deepfri_score",
+                              "EC_number_deepfri_all", "EC_number_deepfri_all_scores")
+ec_cols_to_remove <- setdiff(
+  grep("^EC_number", colnames(annotation_results_integrated), value = TRUE),
+  deepfri_ec_cols_to_keep
+)
 annotation_results_integrated <- annotation_results_integrated |>
-  select(-starts_with("EC_number")) |>
+  select(-all_of(ec_cols_to_remove)) |>
   left_join(processed_EC_numbers, by = "locus_tag_SC")
 
 # Add documentation to the variables
 base::comment(annotation_results_integrated$EC_number_SC_best) <- 
-  "The best (highest scoring) EC number(s) for this locus tag. Multiple numbers are separated by semicolons if they have the same highest score."
+  "The best (highest scoring) EC number(s) for this locus tag. Multiple numbers are separated by semicolons if they have the same highest score. Consensus from Bakta, Prokka, MicrobeAnnotator, and DeepFRI (best prediction only)."
 
 base::comment(annotation_results_integrated$EC_number_SC_all) <- 
   "All EC numbers (from all available tools) for this locus tag, ordered by decreasing score. Numbers are separated by semicolons."
@@ -311,7 +396,9 @@ if (exists("COG_number_raw_data") && nrow(COG_number_raw_data) > 0) {
   
   # Attach comments to the final columns in annotation_results_integrated
   comment(annotation_results_integrated$COG_number_SC) <- comment(COG_number_raw_data$COG_number_SC)
-  comment(annotation_results_integrated$COG_category_SC) <- comment(COG_number_raw_data$COG_category_SC)
+  if ("COG_category_SC" %in% colnames(annotation_results_integrated)) {
+    comment(annotation_results_integrated$COG_category_SC) <- comment(COG_number_raw_data$COG_category_SC)
+  }
   
   # Attach comments to the COG_number_scores dataframe
   comment(COG_number_scores$COG_number_SC) <- comment(COG_number_raw_data$COG_number_SC)
@@ -396,10 +483,34 @@ rm(available_columns, K_number_scores)
 
 
 # Main processing of gene names and products
-available_columns <- c("locus_tag_SC", "gene_bakta", "gene_product_bakta", "gene_prokka", "gene_product_prokka", "gene_product_microbeannotator")
+available_columns <- c("locus_tag_SC", "gene_bakta", "gene_product_bakta", "gene_prokka", "gene_product_prokka", "gene_product_microbeannotator", "gene_product_deepfri", "gene_product_deepfri_score")
 available_columns <- available_columns[available_columns %in% names(annotation_results_integrated)]
 message("Selected columns: ", paste(available_columns, collapse = ", "))
 gene_data_raw <- annotation_results_integrated %>% select(all_of(available_columns))
+
+# Ensure all gene/product columns exist (set to NA if not available)
+# This prevents errors in case_when() when certain annotation tools weren't run
+if (!"gene_bakta" %in% names(gene_data_raw)) {
+  gene_data_raw$gene_bakta <- NA_character_
+}
+if (!"gene_prokka" %in% names(gene_data_raw)) {
+  gene_data_raw$gene_prokka <- NA_character_
+}
+if (!"gene_product_bakta" %in% names(gene_data_raw)) {
+  gene_data_raw$gene_product_bakta <- NA_character_
+}
+if (!"gene_product_prokka" %in% names(gene_data_raw)) {
+  gene_data_raw$gene_product_prokka <- NA_character_
+}
+if (!"gene_product_microbeannotator" %in% names(gene_data_raw)) {
+  gene_data_raw$gene_product_microbeannotator <- NA_character_
+}
+if (!"gene_product_deepfri" %in% names(gene_data_raw)) {
+  gene_data_raw$gene_product_deepfri <- NA_character_
+}
+if (!"gene_product_deepfri_score" %in% names(gene_data_raw)) {
+  gene_data_raw$gene_product_deepfri_score <- NA_real_
+}
 
 # Block 1: Process gene names
 gene_data_raw <- gene_data_raw %>%
@@ -450,43 +561,188 @@ gene_data_raw <- gene_data_raw %>%
     gene_product_dist_bakta_prokka = stringdist(tolower(gene_product_bakta), tolower(gene_product_prokka), method = "osa"),
     gene_product_dist_bakta_micro = stringdist(tolower(gene_product_bakta), tolower(gene_product_microbeannotator), method = "osa"),
     gene_product_dist_prokka_micro = stringdist(tolower(gene_product_prokka), tolower(gene_product_microbeannotator), method = "osa"),
+    gene_product_dist_bakta_deepfri = if("gene_product_deepfri" %in% names(.)) {
+      stringdist(tolower(gene_product_bakta), tolower(gene_product_deepfri), method = "osa")
+    } else { NA_real_ },
+    gene_product_dist_prokka_deepfri = if("gene_product_deepfri" %in% names(.)) {
+      stringdist(tolower(gene_product_prokka), tolower(gene_product_deepfri), method = "osa")
+    } else { NA_real_ },
+    gene_product_dist_micro_deepfri = if("gene_product_deepfri" %in% names(.) & 
+                                          "gene_product_microbeannotator" %in% names(.)) {
+      stringdist(tolower(gene_product_microbeannotator), tolower(gene_product_deepfri), method = "osa")
+    } else { NA_real_ },
     
     # Determine consensus gene product
-    # Algorithm:
-    # 1. Prefer non-hypothetical proteins
-    # 2. If all are hypothetical or NA, prefer in order: bakta, prokka, microbeannotator
+    # Algorithm (hierarchical tiers with democratic voting):
+    # TIER 1: Complete 3-way database consensus
+    # TIER 2: Partial 2-way database consensus (any pair agrees)
+    # TIER 3: All database tools disagree → DeepFRI 4-way voting (distance ≤10, score ≥0.5)
+    # TIER 4: Hypothetical proteins → use DeepFRI if ≥2 tools say hypothetical (score ≥0.5)
+    # TIER 5: Democratic fallback (Bakta = Prokka = Micro, no hypothetical priority)
     gene_product_SC = case_when(
+      # TIER 1: All three database tools agree (complete consensus)
+      !is.na(gene_product_bakta) & !is.na(gene_product_prokka) & !is.na(gene_product_microbeannotator) &
+        gene_product_bakta == gene_product_prokka & 
+        gene_product_bakta == gene_product_microbeannotator &
+        gene_product_bakta != "hypothetical protein" ~ gene_product_bakta,
+      
+      # TIER 2: Two database tools agree (2-way consensus) - prioritize before tie-breaking
+      # Bakta + Prokka agree
+      !is.na(gene_product_bakta) & !is.na(gene_product_prokka) &
+        gene_product_bakta == gene_product_prokka &
+        gene_product_bakta != "hypothetical protein" ~ gene_product_bakta,
+      
+      # Bakta + MicrobeAnnotator agree
+      !is.na(gene_product_bakta) & !is.na(gene_product_microbeannotator) &
+        gene_product_bakta == gene_product_microbeannotator &
+        gene_product_bakta != "hypothetical protein" ~ gene_product_bakta,
+      
+      # Prokka + MicrobeAnnotator agree
+      !is.na(gene_product_prokka) & !is.na(gene_product_microbeannotator) &
+        gene_product_prokka == gene_product_microbeannotator &
+        gene_product_prokka != "hypothetical protein" ~ gene_product_prokka,
+      
+      # TIER 3: All database tools disagree - DeepFRI 4-way voting
+      # Democratic tie-breaking: DeepFRI votes among ALL database predictions
+      # Bakta, Prokka, and MicrobeAnnotator are treated as equal voices
+      "gene_product_deepfri" %in% names(.) & !is.na(gene_product_deepfri) &
+        "gene_product_deepfri_score" %in% names(.) & !is.na(gene_product_deepfri_score) &
+        gene_product_deepfri_score >= 0.5 &
+        # Check that we actually have a 3-way disagreement (no 2-way consensus found)
+        !((!is.na(gene_product_bakta) & !is.na(gene_product_prokka) & 
+           gene_product_bakta == gene_product_prokka & gene_product_bakta != "hypothetical protein") |
+          (!is.na(gene_product_bakta) & !is.na(gene_product_microbeannotator) & 
+           gene_product_bakta == gene_product_microbeannotator & gene_product_bakta != "hypothetical protein") |
+          (!is.na(gene_product_prokka) & !is.na(gene_product_microbeannotator) & 
+           gene_product_prokka == gene_product_microbeannotator & gene_product_prokka != "hypothetical protein")) ~
+        case_when(
+          # Find which database tool DeepFRI agrees with most (minimum distance ≤10)
+          # Calculate all distances and find minimum
+          !is.na(gene_product_dist_bakta_deepfri) & 
+            !is.na(gene_product_dist_prokka_deepfri) & 
+            !is.na(gene_product_dist_micro_deepfri) &
+            gene_product_dist_bakta_deepfri <= 10 &
+            gene_product_dist_bakta_deepfri <= gene_product_dist_prokka_deepfri &
+            gene_product_dist_bakta_deepfri <= gene_product_dist_micro_deepfri ~ gene_product_bakta,
+          
+          !is.na(gene_product_dist_prokka_deepfri) & 
+            !is.na(gene_product_dist_bakta_deepfri) & 
+            !is.na(gene_product_dist_micro_deepfri) &
+            gene_product_dist_prokka_deepfri <= 10 &
+            gene_product_dist_prokka_deepfri <= gene_product_dist_bakta_deepfri &
+            gene_product_dist_prokka_deepfri <= gene_product_dist_micro_deepfri ~ gene_product_prokka,
+          
+          !is.na(gene_product_dist_micro_deepfri) & 
+            !is.na(gene_product_dist_bakta_deepfri) & 
+            !is.na(gene_product_dist_prokka_deepfri) &
+            gene_product_dist_micro_deepfri <= 10 &
+            gene_product_dist_micro_deepfri <= gene_product_dist_bakta_deepfri &
+            gene_product_dist_micro_deepfri <= gene_product_dist_prokka_deepfri ~ gene_product_microbeannotator,
+          
+          # If only 2 tools available (e.g., no MicrobeAnnotator)
+          !is.na(gene_product_dist_bakta_deepfri) & 
+            !is.na(gene_product_dist_prokka_deepfri) &
+            is.na(gene_product_dist_micro_deepfri) &
+            gene_product_dist_prokka_deepfri <= 10 &
+            gene_product_dist_prokka_deepfri < gene_product_dist_bakta_deepfri ~ gene_product_prokka,
+          
+          !is.na(gene_product_dist_bakta_deepfri) & 
+            !is.na(gene_product_dist_prokka_deepfri) &
+            is.na(gene_product_dist_micro_deepfri) &
+            gene_product_dist_bakta_deepfri <= 10 ~ gene_product_bakta,
+          
+          # No clear match within threshold - use Bakta as tiebreaker of last resort
+          TRUE ~ gene_product_bakta
+        ),
+      
+      # TIER 4: Hypothetical proteins - use DeepFRI when ≥2 traditional tools say hypothetical
+      # This is where structure-based ML adds most value (no database reference exists)
+      "gene_product_deepfri" %in% names(.) & !is.na(gene_product_deepfri) &
+        "gene_product_deepfri_score" %in% names(.) & !is.na(gene_product_deepfri_score) &
+        gene_product_deepfri_score >= 0.5 &
+        (
+          # Count how many traditional tools say "hypothetical protein"
+          ((!is.na(gene_product_bakta) & gene_product_bakta == "hypothetical protein") +
+           (!is.na(gene_product_prokka) & gene_product_prokka == "hypothetical protein") +
+           (!is.na(gene_product_microbeannotator) & gene_product_microbeannotator == "hypothetical protein")) >= 2
+        ) ~ gene_product_deepfri,
+      
+      # TIER 5: Democratic fallback - all tools treated equally
+      # Non-hypothetical proteins preferred, but no priority among tools
+      # Bakta only wins if all other logic fails (tiebreaker of last resort)
       !is.na(gene_product_bakta) & gene_product_bakta != "hypothetical protein" ~ gene_product_bakta,
       !is.na(gene_product_prokka) & gene_product_prokka != "hypothetical protein" ~ gene_product_prokka,
       !is.na(gene_product_microbeannotator) & gene_product_microbeannotator != "hypothetical protein" ~ gene_product_microbeannotator,
       !is.na(gene_product_bakta) ~ gene_product_bakta,
       !is.na(gene_product_prokka) ~ gene_product_prokka,
       !is.na(gene_product_microbeannotator) ~ gene_product_microbeannotator,
+      "gene_product_deepfri" %in% names(.) & !is.na(gene_product_deepfri) ~ gene_product_deepfri,
       TRUE ~ NA_character_
     ),
     
     # Determine confidence level of consensus
-    # Algorithm:
-    # 1. If all three sources agree, mark as "complete_consensus"
-    # 2. If Bakta is very similar (distance <= 10) to at least one other source, mark as "high_probability_consensus"
-    # 3. If Bakta is somewhat similar (10 < distance <= 20) to at least one other source, mark as "medium_probability_consensus"
-    # 4. If Bakta is less similar to other sources (20 < distance <= 25), mark as "low_probability_consensus"
-    # 5. If Bakta is very different from other sources (distance > 25), mark as "no_consensus"
-    # 6. If only Bakta is available, mark as "only_bakta_result"
-    # 7. If only one source (not Bakta) is available, mark as "only_one_result"
+    # Algorithm considers the hierarchical tier system and DeepFRI's role:
+    # Tier 1: complete_consensus (all 3 database tools agree)
+    # Tier 2: complete_consensus (any 2 database tools agree)
+    # Tier 3: high_probability_consensus_deepfri_tiebreak (DeepFRI breaks database disagreement)
+    # Tier 4: deepfri_structure_prediction (DeepFRI used for hypotheticals)
+    # Tier 5+: Traditional distance-based confidence levels
     
     gene_product_SC_confidence = case_when(
-      # Complete consensus among all three
+      # TIER 1: All three database tools agree (strongest consensus)
       !is.na(gene_product_bakta) & !is.na(gene_product_prokka) & !is.na(gene_product_microbeannotator) &
-        (gene_product_bakta == gene_product_prokka & gene_product_bakta == gene_product_microbeannotator) ~ "complete_consensus",
+        gene_product_bakta == gene_product_prokka & 
+        gene_product_bakta == gene_product_microbeannotator &
+        gene_product_bakta != "hypothetical protein" ~ "complete_consensus",
       
-      # High probability consensus
-      # Bakta is very similar (distance <= 10) to at least one other source
+      # TIER 2: Two database tools agree (complete consensus)
+      (!is.na(gene_product_bakta) & !is.na(gene_product_prokka) &
+        gene_product_bakta == gene_product_prokka &
+        gene_product_bakta != "hypothetical protein") |
+      (!is.na(gene_product_bakta) & !is.na(gene_product_microbeannotator) &
+        gene_product_bakta == gene_product_microbeannotator &
+        gene_product_bakta != "hypothetical protein") |
+      (!is.na(gene_product_prokka) & !is.na(gene_product_microbeannotator) &
+        gene_product_prokka == gene_product_microbeannotator &
+        gene_product_prokka != "hypothetical protein") ~ "complete_consensus",
+      
+      # TIER 3: DeepFRI was used as tie-breaker (high probability - 4-way democratic vote)
+      # All database tools (Bakta, Prokka, MicrobeAnnotator) treated equally
+      # DeepFRI votes for the most similar prediction
+      "gene_product_deepfri" %in% names(.) & !is.na(gene_product_deepfri) &
+        "gene_product_deepfri_score" %in% names(.) & !is.na(gene_product_deepfri_score) &
+        gene_product_deepfri_score >= 0.5 &
+        # Verify this was actually a disagreement case (not caught by TIER 2)
+        !((!is.na(gene_product_bakta) & !is.na(gene_product_prokka) & 
+           gene_product_bakta == gene_product_prokka & gene_product_bakta != "hypothetical protein") |
+          (!is.na(gene_product_bakta) & !is.na(gene_product_microbeannotator) & 
+           gene_product_bakta == gene_product_microbeannotator & gene_product_bakta != "hypothetical protein") |
+          (!is.na(gene_product_prokka) & !is.na(gene_product_microbeannotator) & 
+           gene_product_prokka == gene_product_microbeannotator & gene_product_prokka != "hypothetical protein")) &
+        # Check that a non-hypothetical database tool was selected
+        ((gene_product_SC == gene_product_bakta & gene_product_bakta != "hypothetical protein") |
+         (gene_product_SC == gene_product_prokka & gene_product_prokka != "hypothetical protein") |
+         (gene_product_SC == gene_product_microbeannotator & 
+          gene_product_microbeannotator != "hypothetical protein")) ~ "high_probability_consensus_deepfri_tiebreak",
+      
+      # TIER 4: DeepFRI used for hypothetical protein prediction (≥2 tools say hypothetical)
+      "gene_product_deepfri" %in% names(.) & 
+        !is.na(gene_product_deepfri) &
+        gene_product_SC == gene_product_deepfri &
+        "gene_product_deepfri_score" %in% names(.) & !is.na(gene_product_deepfri_score) &
+        gene_product_deepfri_score >= 0.5 &
+        (
+          ((!is.na(gene_product_bakta) & gene_product_bakta == "hypothetical protein") +
+           (!is.na(gene_product_prokka) & gene_product_prokka == "hypothetical protein") +
+           (!is.na(gene_product_microbeannotator) & gene_product_microbeannotator == "hypothetical protein")) >= 2
+        ) ~ "deepfri_structure_prediction",
+      
+      # Traditional distance-based confidence levels (TIER 5+)
+      # High probability consensus (traditional - very similar)
       !is.na(gene_product_bakta) & 
         (gene_product_dist_bakta_prokka <= 10 | gene_product_dist_bakta_micro <= 10) ~ "high_probability_consensus",
       
-      # Medium probability consensus
-      # Bakta is somewhat similar (15 < distance <= 30) to at least one other source
+      # Medium probability consensus (somewhat similar)
       !is.na(gene_product_bakta) & 
         ((gene_product_dist_bakta_prokka > 10 & gene_product_dist_bakta_prokka <= 20) |
            (gene_product_dist_bakta_micro > 10 & gene_product_dist_bakta_micro <= 20)) ~ "medium_probability_consensus",
@@ -553,9 +809,13 @@ gene_data_raw$overall_gene_SC_confidence[gene_data_raw$gene_SC_confidence == "co
 gene_data_raw$overall_gene_SC_confidence[gene_data_raw$gene_product_SC_confidence == "complete_consensus"] <- "very_high"
 
 # Update annotation_results_integrated with new columns
+# Keep DeepFRI columns (gene_product_deepfri, gene_product_deepfri_score) for reference
+deepfri_cols_to_keep <- c("gene_product_deepfri", "gene_product_deepfri_score")
+cols_to_remove <- setdiff(available_columns, c("locus_tag_SC", deepfri_cols_to_keep))
+
 if (nrow(gene_data_raw) > 0) {
   annotation_results_integrated <- annotation_results_integrated %>%
-    select(-all_of(setdiff(available_columns, "locus_tag_SC"))) %>%
+    select(-all_of(cols_to_remove)) %>%
     left_join(gene_data_raw %>% select(locus_tag_SC, ends_with(c("_SC", "all_gene_SC_confidence"))),
               by = "locus_tag_SC")
   
@@ -596,7 +856,7 @@ if (nrow(gene_data_raw) > 0) {
   1. Convert gene_SC_confidence and gene_product_SC_confidence to numeric scores (1-5).
   2. Calculate weighted average: 40% gene confidence, 60% product confidence.
   3. Convert weighted average to categorical confidence level.
-  Levels: 'very_high' (≥4.5), 'high' (≥3.5), 'medium' (≥2.5), 'low' (≥1.5), 'very_low' (>0), 'unknown' (0)."
+  Levels: 'very_high' (>=4.5), 'high' (>=3.5), 'medium' (>=2.5), 'low' (>=1.5), 'very_low' (>0), 'unknown' (0)."
   
 } else {
   message("No gene_data_raw generated. Skipping the join and confidence creation steps.")
@@ -634,36 +894,42 @@ annotation_results_integrated <- annotation_results_integrated %>%
 
 # Last details
 # Add prefix "COG" to each value in COG_number_SC, keeping NA as NA
-annotation_results_integrated$COG_number_SC <- ifelse(
-  is.na(annotation_results_integrated$COG_number_SC),
-  NA,
-  paste0("COG", annotation_results_integrated$COG_number_SC)
-)
-
-# Replace patterns COGCOG:COG, COG:COG, and COG: with COG
-annotation_results_integrated$COG_number_SC <- gsub(
-  pattern = "COGCOG:COG|COG:COG|COG:",
-  replacement = "COG",
-  x = annotation_results_integrated$COG_number_SC
-)
+if ("COG_number_SC" %in% colnames(annotation_results_integrated)) {
+  annotation_results_integrated$COG_number_SC <- ifelse(
+    is.na(annotation_results_integrated$COG_number_SC),
+    NA,
+    paste0("COG", annotation_results_integrated$COG_number_SC)
+  )
+  
+  # Replace patterns COGCOG:COG, COG:COG, and COG: with COG
+  annotation_results_integrated$COG_number_SC <- gsub(
+    pattern = "COGCOG:COG|COG:COG|COG:",
+    replacement = "COG",
+    x = annotation_results_integrated$COG_number_SC
+  )
+}
 
 # Add prefix "GO:" to each number in GO_number_bakta, keeping NA as NA
-annotation_results_integrated$GO_number_bakta <- sapply(annotation_results_integrated$GO_number_bakta, function(x) {
-  if (is.na(x)) {
-    return(NA)
-  } else {
-    return(paste0("GO:", unlist(strsplit(x, "; ")), collapse = "; "))
-  }
-})
+if ("GO_number_bakta" %in% colnames(annotation_results_integrated)) {
+  annotation_results_integrated$GO_number_bakta <- sapply(annotation_results_integrated$GO_number_bakta, function(x) {
+    if (is.na(x)) {
+      return(NA)
+    } else {
+      return(paste0("GO:", unlist(strsplit(x, "; ")), collapse = "; "))
+    }
+  })
+}
 
 # Add prefix "SO:" to each number in SO_number_bakta, keeping NA as NA
-annotation_results_integrated$SO_number_bakta <- sapply(annotation_results_integrated$SO_number_bakta, function(x) {
-  if (is.na(x)) {
-    return(NA)
-  } else {
-    return(paste0("SO:", unlist(strsplit(x, "; ")), collapse = "; "))
-  }
-})
+if ("SO_number_bakta" %in% colnames(annotation_results_integrated)) {
+  annotation_results_integrated$SO_number_bakta <- sapply(annotation_results_integrated$SO_number_bakta, function(x) {
+    if (is.na(x)) {
+      return(NA)
+    } else {
+      return(paste0("SO:", unlist(strsplit(x, "; ")), collapse = "; "))
+    }
+  })
+}
 
 # Define the desired order of columns
 desired_column_order <- c(
@@ -675,21 +941,36 @@ desired_column_order <- c(
   "locus_tag_bakta", 
   "locus_tag_SC", 
   "gene_SC", 
-  "gene_product_SC", 
+  "gene_product_SC",
+  "gene_product_deepfri",
+  "gene_product_deepfri_score",
   "overall_gene_SC_confidence",
   "start_position", 
   "end_position", 
   "length_bp", 
   "strand",
   "EC_number_SC_best", 
-  "EC_number_SC_all", 
+  "EC_number_SC_all",
+  "EC_number_deepfri",
+  "EC_number_deepfri_score",
+  "EC_number_deepfri_all",
+  "EC_number_deepfri_all_scores",
   "COG_category_SC", 
   "COG_number_SC", 
   "K_number_SC",
   "type_prokka",
   "type_bakta",
   "type_SC",
-  "GO_number_bakta", 
+  "GO_number_bakta",
+  "GO_molecular_function_number_deepfri",
+  "GO_molecular_function_score_deepfri",
+  "GO_molecular_function_names_deepfri",
+  "GO_biological_process_number_deepfri",
+  "GO_biological_process_score_deepfri",
+  "GO_biological_process_names_deepfri",
+  "GO_cellular_component_number_deepfri",
+  "GO_cellular_component_score_deepfri",
+  "GO_cellular_component_names_deepfri",
   "SO_number_bakta",
   "nucleotide_code", 
   "amino_acid_code",
@@ -709,6 +990,7 @@ desired_column_order <- c(
   "source_file_prokka",
   "source_file_bakta",
   "source_file_microbeannotator",
+  "source_file_deepfri",
   "software_version"
 )
 

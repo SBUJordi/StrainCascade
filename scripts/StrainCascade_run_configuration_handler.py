@@ -17,29 +17,31 @@ script_info = {
     "StrainCascade_SPAdes_assembly.sh": "SC3 SPAdes Assembly",
     "StrainCascade_Canu_assembly.sh": "SC4 Canu Assembly",
     "StrainCascade_Flye_assembly.sh": "SC5 Flye Assembly",
-    "StrainCascade_assembly_evaluation1.sh": "SC6 Assembly Evaluation 1",
-    "StrainCascade_MAC2_assembly_merging.sh": "SC7 MAC2 Assembly Merging",
-    "StrainCascade_assembly_evaluation2.sh": "SC8 Assembly Evaluation 2",
-    "StrainCascade_Circlator_circularisation.sh": "SC9 Circlator Circularisation",
-    "StrainCascade_assembly_evaluation3.sh": "SC10 Assembly Evaluation 3",
-    "StrainCascade_arrow_medaka_polishing.sh": "SC11 Arrow Medaka Polishing",
-    "StrainCascade_NGMLR_BBMap_coverage.sh": "SC12 NGMLR BBMap Coverage",
-    "StrainCascade_CheckM2_QC.sh": "SC13 CheckM2 QC",
-    "StrainCascade_GTDB-Tk_taxonomy.sh": "SC14 GTDB-Tk Taxonomy",
-    "StrainCascade_GTDB-Tk_de_novo_tree.sh": "SC15 GTDB-Tk De Novo Tree",
-    "StrainCascade_Bakta_annotation.sh": "SC16 Bakta Annotation",
-    "StrainCascade_Prokka_annotation.sh": "SC17 Prokka Annotation",
-    "StrainCascade_MicrobeAnnotator_annotation.sh": "SC18 MicrobeAnnotator Annotation",
-    "StrainCascade_PlasmidFinder_identification.sh": "SC19 PlasmidFinder Identification",
-    "StrainCascade_AMRFinderPlus_antimicrobial_resistance_identification.sh": "SC20 AMRFinderPlus Antimicrobial Resistance Identification",
-    "StrainCascade_ResFinder_antimicrobial_resistance_identification.sh": "SC21 ResFinder Antimicrobial Resistance Identification",
-    "StrainCascade_dbCAN3_CAZymes_identification.sh": "SC22 dbCAN3 CAZymes Identification",
-    "StrainCascade_IslandPath_genomic_islands_identification.sh": "SC23 IslandPath Genomic Islands Identification",
-    "StrainCascade_VirSorter2_phage_identification.sh": "SC24 VirSorter2 Phage Identification",
-    "StrainCascade_DeepVirFinder_phage_identification.sh": "SC25 DeepVirFinder Phage Identification",
-    "StrainCascade_CRISPRCasFinder_identification.sh": "SC26 CRISPRCasFinder CRISPRCas Identification",
-    "StrainCascade_ISEScan_IS_elements_identification.sh": "SC27 ISEScan IS Elements Identification",
-    "StrainCascade_data_integration.sh": "SC28 Data Integration"
+    "StrainCascade_Unicycler_assembly.sh": "SC6 Unicycler Assembly",
+    "StrainCascade_assembly_evaluation1.sh": "SC7 Assembly Evaluation 1",
+    "StrainCascade_MAC2_assembly_merging.sh": "SC8 MAC2 Assembly Merging",
+    "StrainCascade_assembly_evaluation2.sh": "SC9 Assembly Evaluation 2",
+    "StrainCascade_Circlator_circularisation.sh": "SC10 Circlator Circularisation",
+    "StrainCascade_assembly_evaluation3.sh": "SC11 Assembly Evaluation 3",
+    "StrainCascade_assembly_polishing.sh": "SC12 Assembly Polishing",
+    "StrainCascade_minimap2_BBMap_coverage.sh": "SC13 minimap2 BBMap Coverage",
+    "StrainCascade_CheckM2_QC.sh": "SC14 CheckM2 QC",
+    "StrainCascade_GTDB-Tk_taxonomy.sh": "SC15 GTDB-Tk Taxonomy",
+    "StrainCascade_GTDB-Tk_de_novo_tree.sh": "SC16 GTDB-Tk De Novo Tree",
+    "StrainCascade_Bakta_annotation.sh": "SC17 Bakta Annotation",
+    "StrainCascade_Prokka_annotation.sh": "SC18 Prokka Annotation",
+    "StrainCascade_DeepFRI_annotation.sh": "SC19 DeepFRI Annotation",
+    "StrainCascade_MicrobeAnnotator_annotation.sh": "SC20 MicrobeAnnotator Annotation",
+    "StrainCascade_PlasmidFinder_identification.sh": "SC21 PlasmidFinder Identification",
+    "StrainCascade_AMRFinderPlus_antimicrobial_resistance_identification.sh": "SC22 AMRFinderPlus Antimicrobial Resistance Identification",
+    "StrainCascade_ResFinder_antimicrobial_resistance_identification.sh": "SC23 ResFinder Antimicrobial Resistance Identification",
+    "StrainCascade_dbCAN3_CAZymes_identification.sh": "SC24 dbCAN3 CAZymes Identification",
+    "StrainCascade_IslandPath_genomic_islands_identification.sh": "SC25 IslandPath Genomic Islands Identification",
+    "StrainCascade_VirSorter2_phage_identification.sh": "SC26 VirSorter2 Phage Identification",
+    "StrainCascade_geNomad_phage_identification.sh": "SC27 geNomad Phage and Plasmid Identification",
+    "StrainCascade_CRISPRCasFinder_identification.sh": "SC28 CRISPRCasFinder CRISPRCas Identification",
+    "StrainCascade_ISEScan_IS_elements_identification.sh": "SC29 ISEScan IS Elements Identification",
+    "StrainCascade_data_integration.sh": "SC30 Data Integration"
 }
 
 # Reverse dictionary for human-readable names and SC numbers
@@ -54,18 +56,20 @@ bundles = {
         "StrainCascade_SPAdes_assembly.sh",
         "StrainCascade_Canu_assembly.sh",
         "StrainCascade_Flye_assembly.sh",
+        "StrainCascade_Unicycler_assembly.sh",
         "StrainCascade_assembly_evaluation1.sh",
         "StrainCascade_MAC2_assembly_merging.sh",
         "StrainCascade_assembly_evaluation2.sh",
         "StrainCascade_Circlator_circularisation.sh",
         "StrainCascade_assembly_evaluation3.sh",
-        "StrainCascade_arrow_medaka_polishing.sh",
-        "StrainCascade_NGMLR_BBMap_coverage.sh",
+        "StrainCascade_assembly_polishing.sh",
+        "StrainCascade_minimap2_BBMap_coverage.sh",
         "StrainCascade_CheckM2_QC.sh"
     ],
     "annotation": [
         "StrainCascade_Bakta_annotation.sh",
         "StrainCascade_Prokka_annotation.sh",
+        "StrainCascade_DeepFRI_annotation.sh",
         "StrainCascade_MicrobeAnnotator_annotation.sh"
     ],
     "functional": [
@@ -77,7 +81,7 @@ bundles = {
     ],
     "phage": [
         "StrainCascade_VirSorter2_phage_identification.sh",
-        "StrainCascade_DeepVirFinder_phage_identification.sh",
+        "StrainCascade_geNomad_phage_identification.sh",
         "StrainCascade_CRISPRCasFinder_identification.sh",
         "StrainCascade_ISEScan_IS_elements_identification.sh"
     ]
@@ -101,7 +105,7 @@ execution_modes = {
         "StrainCascade_assembly_evaluation2.sh",
         "StrainCascade_Circlator_circularisation.sh",
         "StrainCascade_assembly_evaluation3.sh",
-        "StrainCascade_arrow_medaka_polishing.sh",
+        "StrainCascade_assembly_polishing.sh",
         "StrainCascade_CheckM2_QC.sh",
         "StrainCascade_GTDB-Tk_taxonomy.sh",
         "StrainCascade_Bakta_annotation.sh",
@@ -114,17 +118,19 @@ execution_modes = {
         "StrainCascade_SPAdes_assembly.sh",
         "StrainCascade_Canu_assembly.sh",
         "StrainCascade_Flye_assembly.sh",
+        "StrainCascade_Unicycler_assembly.sh",
         "StrainCascade_assembly_evaluation1.sh",
         "StrainCascade_MAC2_assembly_merging.sh",
         "StrainCascade_assembly_evaluation2.sh",
         "StrainCascade_Circlator_circularisation.sh",
         "StrainCascade_assembly_evaluation3.sh",
-        "StrainCascade_arrow_medaka_polishing.sh",
-        "StrainCascade_NGMLR_BBMap_coverage.sh",
+        "StrainCascade_assembly_polishing.sh",
+        "StrainCascade_minimap2_BBMap_coverage.sh",
         "StrainCascade_CheckM2_QC.sh",
         "StrainCascade_GTDB-Tk_taxonomy.sh",
         "StrainCascade_Bakta_annotation.sh",
         "StrainCascade_Prokka_annotation.sh",
+        "StrainCascade_DeepFRI_annotation.sh",
         "StrainCascade_MicrobeAnnotator_annotation.sh",
         "StrainCascade_PlasmidFinder_identification.sh",
         "StrainCascade_AMRFinderPlus_antimicrobial_resistance_identification.sh",
@@ -132,6 +138,7 @@ execution_modes = {
         "StrainCascade_dbCAN3_CAZymes_identification.sh",
         "StrainCascade_IslandPath_genomic_islands_identification.sh",
         "StrainCascade_VirSorter2_phage_identification.sh",
+        "StrainCascade_geNomad_phage_identification.sh",
         "StrainCascade_CRISPRCasFinder_identification.sh",
         "StrainCascade_ISEScan_IS_elements_identification.sh",
         "StrainCascade_data_integration.sh"
@@ -142,11 +149,9 @@ execution_modes = {
 def find_best_match(input_string, script_info):
     input_string = input_string.lower().strip()
 
-    # Check if input is a direct match with human-readable names, script names, or SC numbers
+    # Check if input is a direct match with human-readable names or SC numbers
     if input_string in script_lookup:
         return [script_lookup[input_string]]
-    elif input_string in script_info.values():
-        return [input_string]
     elif input_string.isdigit() and f"SC{input_string}" in script_number_lookup:
         return [script_number_lookup[f"SC{input_string}"]]
 
@@ -161,7 +166,7 @@ def preprocess_input(input_string):
     input_string = input_string.strip().upper()
     
     # Check for SCx or SCxx pattern
-    if re.search(r'SC\d{1,2}', input_string, re.IGNORECASE):
+    if re.search(r'SC\d{1,2}$', input_string):
         return input_string
     
     # Check for pure number
@@ -179,8 +184,8 @@ def process_custom_input(inputs, script_info):
     for input_string in inputs:
         processed_input = preprocess_input(input_string)
         
-        if processed_input.startswith('SC') and processed_input[2:].isdigit():
-            # Direct lookup for SC numbers
+        if processed_input.startswith('SC') and re.fullmatch(r'SC\d+', processed_input):
+            # Direct lookup for SC numbers (e.g., SC7, SC12)
             script_number = processed_input
             if script_number in script_number_lookup:
                 script = script_number_lookup[script_number]
@@ -204,7 +209,10 @@ def process_custom_input(inputs, script_info):
             info_messages.append(f"Warning: Module '{script_info[script]}' appears {count} times.")
 
     # Sort scripts by SC number
-    sorted_scripts = sorted(matched_scripts, key=lambda x: int(script_info[x].split(" ")[0][2:]))
+    def sc_sort_key(x):
+        sc_label = script_info[x].split(" ")[0][2:]  # e.g., '6', '12'
+        return int(sc_label) if sc_label.isdigit() else 0
+    sorted_scripts = sorted(matched_scripts, key=sc_sort_key)
 
     if matched_scripts != sorted_scripts:
         info_messages.append("Note: Script numbers were not in increasing order. They have been rearranged.")

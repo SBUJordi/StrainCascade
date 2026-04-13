@@ -41,6 +41,16 @@ readonly MIN_ASSEMBLIES=5
 # Source utility functions
 source "$UTILS_FILE"
 
+# Clean up old MAC2 results to handle re-runs properly
+if [[ -d "$MAC2_OUTPUT_DIR" ]]; then
+    log "$LOGS_DIR" "$LOG_NAME" "Removing existing MAC2 output directory for clean re-run"
+    rm -rf "$MAC2_OUTPUT_DIR"
+fi
+if [[ -f "${GENOME_ASSEMBLY_DIR}/${SAMPLE_NAME}_mac2.0_merged_assembly.fasta" ]]; then
+    log "$LOGS_DIR" "$LOG_NAME" "Removing existing MAC2 merged assembly"
+    rm -f "${GENOME_ASSEMBLY_DIR}/${SAMPLE_NAME}_mac2.0_merged_assembly.fasta"
+fi
+
 # Define additional utility functions
 count_contigs() {
     local file="$1"
@@ -240,14 +250,14 @@ for index in "${!ordered_reference_assemblies[@]}"; do
     
     log "$LOGS_DIR" "$LOG_NAME" "Starting MAC2.0 with reference: ${assembly_name}"
     
-    # Run MAC2.0 with proper paths
+    # Run MAC2.0 with proper paths (files are in the input/ subdirectory)
     if ! apptainer exec \
         --bind "${MAC2_WORKDIR}":/mnt/mac2 \
         "$straincascade_assembly_qc_refinement_sif" \
         /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && \
                       conda activate MAC2.0_env && \
                       cd /mnt/mac2 && \
-                      MAC2.0 query.fa ${reference_file}"; then
+                      MAC2.0 input/query.fa input/${reference_file}"; then
         log "$LOGS_DIR" "$LOG_NAME" "Error: MAC2.0 process failed for $assembly_name. Trying next assembly..."
         continue
     fi

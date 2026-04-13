@@ -36,6 +36,9 @@ fi
 # Default values
 input=""
 assembly_input=""
+external_assembly_dir=""
+short_reads_r1=""
+short_reads_r2=""
 output_directory=$(get_absolute_path "$(pwd)")
 sequencing_type="pacbio-hifi"
 threads=32
@@ -43,12 +46,13 @@ locus_tag="automatic"
 result_type="main"
 force_overwrite="yes"
 selection_algorithm="contig"
-version="1.0.0"
+version="2.0.0"
 databases_directory="$(dirname "$script_dir")/databases"
 apptainer_images_dir="$(dirname "$script_dir")/apptainer_images"
 execution_mode=""
 bundle=""
 reproducibility_mode="heuristic"
+custom_args=""
 
 # Valid sequencing types
 valid_seq_types=("pacbio-raw" "pacbio-corr" "pacbio-hifi" "nano-raw" "nano-corr" "nano-hq")
@@ -63,18 +67,20 @@ all_modules=(
   "StrainCascade_SPAdes_assembly.sh"
   "StrainCascade_Canu_assembly.sh"
   "StrainCascade_Flye_assembly.sh"
+  "StrainCascade_Unicycler_assembly.sh"
   "StrainCascade_assembly_evaluation1.sh"
   "StrainCascade_MAC2_assembly_merging.sh"
   "StrainCascade_assembly_evaluation2.sh"
   "StrainCascade_Circlator_circularisation.sh"
   "StrainCascade_assembly_evaluation3.sh"
-  "StrainCascade_arrow_medaka_polishing.sh"
-  "StrainCascade_NGMLR_BBMap_coverage.sh"
+  "StrainCascade_assembly_polishing.sh"
+  "StrainCascade_minimap2_BBMap_coverage.sh"
   "StrainCascade_CheckM2_QC.sh"
   "StrainCascade_GTDB-Tk_taxonomy.sh"
   "StrainCascade_GTDB-Tk_de_novo_tree.sh"
   "StrainCascade_Bakta_annotation.sh"
   "StrainCascade_Prokka_annotation.sh"
+  "StrainCascade_DeepFRI_annotation.sh"
   "StrainCascade_MicrobeAnnotator_annotation.sh"
   "StrainCascade_PlasmidFinder_identification.sh"
   "StrainCascade_AMRFinderPlus_antimicrobial_resistance_identification.sh"
@@ -82,16 +88,19 @@ all_modules=(
   "StrainCascade_dbCAN3_CAZymes_identification.sh"
   "StrainCascade_IslandPath_genomic_islands_identification.sh"
   "StrainCascade_VirSorter2_phage_identification.sh"
-  "StrainCascade_DeepVirFinder_phage_identification.sh"
+  "StrainCascade_geNomad_phage_identification.sh"
   "StrainCascade_CRISPRCasFinder_identification.sh"
   "StrainCascade_ISEScan_IS_elements_identification.sh"
-  "StrainCascade_run_summary"
+  "StrainCascade_run_summary.sh"
   "StrainCascade_data_integration.sh"
 )
 
 # Function to print version
 version() {
-    echo "StrainCascade version $version"
+    print_logo
+    echo -e "${C_BOLD}Version${C_RESET} ${C_ORANGE}${version}${C_RESET}"
+    echo -e "${C_DIM}Bacterial Genome Assembly & Annotation Pipeline${C_RESET}"
+    echo
     exit 0
 }
 
@@ -164,6 +173,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -i|--input) input="$2"; shift 2 ;;
         -a|--assembly_input) assembly_input="$2"; shift 2 ;;
+        -sr1|--short-reads-r1) short_reads_r1="$2"; shift 2 ;;
+        -sr2|--short-reads-r2) short_reads_r2="$2"; shift 2 ;;
         -ea|--external_assembly_dir)
             external_assembly_dir="$(get_absolute_path "$2")"
             if [[ ! -d "$external_assembly_dir" && -n "$external_assembly_dir" ]]; then
@@ -228,7 +239,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-shift $((OPTIND-1))
 
 # Check for mutually exclusive -i and -a arguments
 if [[ -n $input && -n $assembly_input ]]; then
@@ -366,30 +376,56 @@ fi
 # Handle input
 input_files=$(handle_input "$input" "$input_type")
 if [[ -z $input_files ]]; then
-    echo "Error: No valid input files found." >&2
+    echo -e "${C_RED}Error:${C_RESET} No valid input files found." >&2
     exit 1
 fi
 
-echo "Initiating StrainCascade version ${version} execution with the following parameters:"
-echo "Input type: $input_type"
-echo "Input files: $input"
-[[ -z "$external_assembly_dir" ]] && echo "External assembly directory for SC15: None provided" || echo "External assembly directory for SC15: $external_assembly_dir"
-echo "Sequencing type: $sequencing_type"
-echo "Threads: $threads"
-echo "Run configuration:"
-echo "$info_output" | tr ',' '\n'
-echo "Selected modules:"
-echo "$human_readable_output" | tr ',' '\n' | sed 's/^/- /'
-echo "Result type: $result_type"
-echo "Assembly selection algorithm: $selection_algorithm"
-echo "Output directory: $output_directory"
-echo "Databases directory: $databases_directory"
-echo "Locus tag: $locus_tag"
-echo "Reproducibility mode: $reproducibility_mode"
+# Display execution summary
+print_header
+echo -e "${C_BOLD}Execution Summary${C_RESET}"
+echo -e "${C_DIM}─────────────────────────────────────────────────────────────────${C_RESET}"
+echo -e "  ${C_BLUE}Version:${C_RESET}      ${version}"
+echo -e "  ${C_BLUE}Input type:${C_RESET}   ${input_type}"
+echo -e "  ${C_BLUE}Input:${C_RESET}        ${input}"
+
+if [[ -z "$external_assembly_dir" ]]; then
+    echo -e "  ${C_BLUE}External asm:${C_RESET} ${C_DIM}None${C_RESET}"
+else
+    echo -e "  ${C_BLUE}External asm:${C_RESET} ${external_assembly_dir}"
+fi
+
+if [[ -n "$short_reads_r1" && -n "$short_reads_r2" ]]; then
+    echo -e "  ${C_BLUE}Short R1:${C_RESET}     ${short_reads_r1}"
+    echo -e "  ${C_BLUE}Short R2:${C_RESET}     ${short_reads_r2}"
+else
+    echo -e "  ${C_BLUE}Short reads:${C_RESET}  ${C_DIM}None (long-read mode)${C_RESET}"
+fi
+
+echo -e "  ${C_BLUE}Sequencing:${C_RESET}   ${sequencing_type}"
+echo -e "  ${C_BLUE}Threads:${C_RESET}      ${threads}"
+echo -e "  ${C_BLUE}Output:${C_RESET}       ${output_directory}"
+echo -e "  ${C_BLUE}Locus tag:${C_RESET}    ${locus_tag}"
+echo -e "  ${C_BLUE}Mode:${C_RESET}         ${reproducibility_mode}"
+echo -e "  ${C_BLUE}Algorithm:${C_RESET}    ${selection_algorithm}"
+echo -e "  ${C_BLUE}Result type:${C_RESET}  ${result_type}"
+echo -e "${C_DIM}─────────────────────────────────────────────────────────────────${C_RESET}"
+
+echo -e "\n${C_BOLD}${C_ORANGE}Configuration${C_RESET}"
+echo "$info_output" | tr ',' '\n' | while read -r line; do
+    echo -e "  ${C_DIM}•${C_RESET} ${line}"
+done
+
+echo -e "\n${C_BOLD}${C_ORANGE}Selected Modules${C_RESET}"
+echo "$human_readable_output" | tr ',' '\n' | while read -r line; do
+    echo -e "  ${C_GREEN}▸${C_RESET} ${line}"
+done
+
+echo -e "\n${C_DIM}─────────────────────────────────────────────────────────────────${C_RESET}"
+echo -e "${C_BOLD}Starting pipeline execution...${C_RESET}\n"
 
 # Iterate over input files and run the pipeline
 for input_file in $input_files; do
-    bash StrainCascade_pipeline_wrapper.sh \
+    bash "${script_dir}/StrainCascade_pipeline_wrapper.sh" \
         "$(get_absolute_path "$script_dir")" \
         "$(get_absolute_path "$utils_file")" \
         "$(get_absolute_path "$input_file")" \
@@ -406,5 +442,7 @@ for input_file in $input_files; do
         "$force_overwrite" \
         "$locus_tag" \
         "$reproducibility_mode" \
-        "$version"
+        "$version" \
+        "${short_reads_r1:-not_provided}" \
+        "${short_reads_r2:-not_provided}"
 done

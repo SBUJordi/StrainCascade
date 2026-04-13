@@ -75,6 +75,7 @@ apptainer exec \
                 --threads $THREADS \
                 --input /mnt/assembly_file \
                 --output-directory /mnt/output \
+                --force \
                 --database_path /mnt/databases_dir/checkm2_db/uniref100.KO.1.dmnd" || {
     log "$LOGS_DIR" "$LOG_NAME" "Error: CheckM2 predict analysis failed"
     exit 1

@@ -44,6 +44,7 @@ fi
 
 # Derived constants
 readonly FLYE_OUTPUT_DIR="$OUTPUT_DIR/Flye_assembly_results"
+# Genome size estimation file shared across assemblers (first assembler to complete creates it)
 readonly GENOME_SIZE_FILE="$GENOME_ASSEMBLY_DIR/informed_genome_size_estimation.txt"
 readonly DEFAULT_GENOME_SIZE="4.5m"
 readonly ASSEMBLY_PREFIX="${SAMPLE_NAME}_assembly_flye"
@@ -55,6 +56,12 @@ readonly MAX_PLAUSIBLE_GENOME_SIZE=10000000
 source "$UTILS_FILE"
 
 log "$LOGS_DIR" "$LOG_NAME" "Threads set to ${THREADS} based on algorithm type ${REPRODUCIBILITY_MODE}."
+
+# Clean up existing Flye output directory to prevent reuse issues
+if [[ -d "$FLYE_OUTPUT_DIR" ]]; then
+    log "$LOGS_DIR" "$LOG_NAME" "Removing existing Flye output directory to ensure clean run"
+    rm -rf "$FLYE_OUTPUT_DIR"
+fi
 
 # Create required output directory
 create_directory "$FLYE_OUTPUT_DIR"
@@ -81,11 +88,13 @@ if [[ -f "$GENOME_SIZE_FILE" ]]; then
     log "$LOGS_DIR" "$LOG_NAME" "Using pre-existing genome size estimation: $genome_size"
 fi
 
-# Create deterministic entropy source
-readonly ENTROPY_FILE="$FLYE_OUTPUT_DIR/deterministic_entropy_file"
-if [[ ! -f "$ENTROPY_FILE" ]]; then
-    dd if=/dev/zero bs=1024 count=100 > "$ENTROPY_FILE"
-    log "$LOGS_DIR" "$LOG_NAME" "Deterministic entropy file created at $ENTROPY_FILE"
+# Entropy source binding for deterministic reproducibility only
+# Using /dev/zero (infinite stream) instead of a finite file to prevent
+# exhaustion-related hangs during long-running assembly stages
+ENTROPY_ARGS=()
+if [[ "${REPRODUCIBILITY_MODE}" == "deterministic" ]]; then
+    ENTROPY_ARGS=(--bind /dev/zero:/dev/random --bind /dev/zero:/dev/urandom)
+    log "$LOGS_DIR" "$LOG_NAME" "Deterministic mode: binding /dev/zero as entropy source"
 fi
 
 # Main assembly execution
@@ -97,8 +106,7 @@ log "$LOGS_DIR" "$LOG_NAME" "Using $THREADS threads"
 apptainer exec \
     --bind "$(dirname "$INPUT_FILE")":/mnt/input \
     --bind "$FLYE_OUTPUT_DIR":/mnt/output \
-    --bind "$ENTROPY_FILE":/dev/random \
-    --bind "$ENTROPY_FILE":/dev/urandom \
+    ${ENTROPY_ARGS[@]+"${ENTROPY_ARGS[@]}"} \
     "$straincascade_genome_assembly_sif" flye \
     --"$SEQUENCING_TYPE" "/mnt/input/$(basename "$INPUT_FILE")" \
     --out-dir /mnt/output \
@@ -155,8 +163,7 @@ if [[ "$ESTIMATE_GENOME_SIZE" == "yes" ]]; then
         apptainer exec \
             --bind "$(dirname "$INPUT_FILE")":/mnt/input \
             --bind "$FLYE_OUTPUT_DIR":/mnt/output \
-            --bind "$ENTROPY_FILE":/dev/random \
-            --bind "$ENTROPY_FILE":/dev/urandom \
+            ${ENTROPY_ARGS[@]+"${ENTROPY_ARGS[@]}"} \
             "$straincascade_genome_assembly_sif" flye \
             --"$SEQUENCING_TYPE" "/mnt/input/$(basename "$INPUT_FILE")" \
             --out-dir /mnt/output \

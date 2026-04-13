@@ -1,0 +1,68 @@
+name: Deploy Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'pages/**'
+      - '.github/workflows/publish-site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Quarto
+        uses: quarto-dev/quarto-actions/setup@v2
+
+      - name: Render Quarto site
+        run: |
+          cd website
+          quarto render
+
+      - name: Assemble deploy directory
+        run: |
+          mkdir -p _deploy/docs
+
+          # Landing page at root
+          cp pages/index.html _deploy/index.html
+
+          # Copy landing page images
+          if [ -d pages/images ]; then
+            cp -r pages/images _deploy/images
+          fi
+
+          # Quarto site under /docs/
+          cp -r website/_site/* _deploy/docs/
+
+          # Prevent Jekyll processing
+          touch _deploy/.nojekyll
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _deploy
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

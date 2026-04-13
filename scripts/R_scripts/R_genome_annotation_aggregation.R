@@ -21,6 +21,7 @@ option_list <- list(
   make_option(c("--bakta"), type="character", default=NULL, help="Path to the Bakta results file"),
   make_option(c("--prokka"), type="character", default=NULL, help="Path to the Prokka results file"),
   make_option(c("--microbeannotator"), type="character", default=NULL, help="Path to the MicrobeAnnotator results file"),
+  make_option(c("--deepfri"), type="character", default=NULL, help="Path to the DeepFRI results file"),
   make_option(c("--version"), type="character", default=NULL, help="StrainCascade version")
 )
 
@@ -53,6 +54,24 @@ tryCatch({
   if (!is.null(opt$bakta)) results$bakta <- qread(file.path(opt$output_dir, opt$bakta))
   if (!is.null(opt$prokka)) results$prokka <- qread(file.path(opt$output_dir, opt$prokka))
   if (!is.null(opt$microbeannotator)) results$microbeannotator <- qread(file.path(opt$output_dir, opt$microbeannotator))
+  deepfri_aa_lookup <- NULL
+  if (!is.null(opt$deepfri)) {
+    deepfri_data <- qread(file.path(opt$output_dir, opt$deepfri))
+    # Store amino_acid_code from DeepFRI for coalescing after merge.
+    # DeepFRI gets sequences from the FAA file, so it may have amino_acid_code
+    # for entries where Bakta/Prokka has NA (e.g., pseudogenes in TSV but still in FAA).
+    locus_col <- intersect(c("locus_tag_bakta", "locus_tag_prokka"), names(deepfri_data))
+    if (length(locus_col) > 0 && "amino_acid_code" %in% names(deepfri_data)) {
+      deepfri_aa_lookup <- deepfri_data[, c(locus_col[1], "amino_acid_code"), drop = FALSE]
+      names(deepfri_aa_lookup)[2] <- "amino_acid_code_deepfri"
+    }
+    # Remove amino_acid_code and software_version from DeepFRI before merge to prevent
+    # these data columns from being used as merge keys by merge_by_common_columns().
+    # When values differ (e.g., NA in Bakta vs actual sequence in DeepFRI),
+    # using them as keys creates duplicate rows instead of a single merged row.
+    deepfri_data <- deepfri_data[, !names(deepfri_data) %in% c("amino_acid_code", "software_version"), drop = FALSE]
+    results$deepfri <- deepfri_data
+  }
   
   # Check if any files were imported
   if (length(results) == 0) {
@@ -72,6 +91,23 @@ tryCatch({
     
     # Remove duplicate rows
     annotation_results_aggregated <- unique(annotation_results_aggregated)
+  }
+  
+  # Coalesce amino_acid_code: fill NA values from DeepFRI's FAA-derived sequences.
+  # Both sources use the same FAA file so values should be identical when both exist.
+  if (!is.null(deepfri_aa_lookup) && "amino_acid_code" %in% names(annotation_results_aggregated)) {
+    locus_col <- names(deepfri_aa_lookup)[1]
+    if (locus_col %in% names(annotation_results_aggregated)) {
+      annotation_results_aggregated <- merge(
+        annotation_results_aggregated, deepfri_aa_lookup,
+        by = locus_col, all.x = TRUE
+      )
+      # Keep existing value if not NA, otherwise use DeepFRI value
+      na_mask <- is.na(annotation_results_aggregated$amino_acid_code)
+      annotation_results_aggregated$amino_acid_code[na_mask] <-
+        annotation_results_aggregated$amino_acid_code_deepfri[na_mask]
+      annotation_results_aggregated$amino_acid_code_deepfri <- NULL
+    }
   }
   
   # Add StrainCascade version if not already present

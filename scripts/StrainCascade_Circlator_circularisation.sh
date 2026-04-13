@@ -61,14 +61,18 @@ readonly r_sif=$(find_apptainer_sif_file "$APPTAINER_DIR" 'r_4.4.1*.sif')
 log "$LOGS_DIR" "$LOG_NAME" "Looking for assembly file to process"
 
 assembly=""
-if best_ev2_file=$(find "$GENOME_ASSEMBLY_DIR" -type f -name "*best_ev2*.fasta" -print -quit); then
-    assembly=$best_ev2_file
+best_ev2_file=$(find "$GENOME_ASSEMBLY_DIR" -type f -name "*best_ev2*.fasta" -print -quit)
+best_ev1_file=$(find "$GENOME_ASSEMBLY_DIR" -type f -name "*best_ev1*.fasta" -print -quit)
+any_fasta=$(find "$GENOME_ASSEMBLY_DIR" -type f -name "*.fasta" -print -quit)
+
+if [[ -n "$best_ev2_file" ]]; then
+    assembly="$best_ev2_file"
     log "$LOGS_DIR" "$LOG_NAME" "Using best_ev2 assembly: $assembly"
-elif best_ev1_file=$(find "$GENOME_ASSEMBLY_DIR" -type f -name "*best_ev1*.fasta" -print -quit); then
-    assembly=$best_ev1_file
+elif [[ -n "$best_ev1_file" ]]; then
+    assembly="$best_ev1_file"
     log "$LOGS_DIR" "$LOG_NAME" "Using best_ev1 assembly: $assembly"
-elif any_fasta=$(find "$GENOME_ASSEMBLY_DIR" -type f -name "*.fasta" -print -quit); then
-    assembly=$any_fasta
+elif [[ -n "$any_fasta" ]]; then
+    assembly="$any_fasta"
     log "$LOGS_DIR" "$LOG_NAME" "Using available assembly: $assembly"
 else
     log "$LOGS_DIR" "$LOG_NAME" "No assembly files found. Skipping Circlator."
@@ -79,13 +83,6 @@ fi
 [[ -d "${CIRCLATOR_OUTPUT_DIR}/${SAMPLE_NAME}_circlator_output" ]] && rm -rf "${CIRCLATOR_OUTPUT_DIR}/${SAMPLE_NAME}_circlator_output"
 find "${GENOME_ASSEMBLY_DIR}" -type f -name "*_circularised.fasta" -delete
 
-# Create deterministic entropy source
-readonly ENTROPY_FILE="$CIRCLATOR_OUTPUT_DIR/deterministic_entropy_file"
-if [[ ! -f "$ENTROPY_FILE" ]]; then
-    dd if=/dev/zero bs=1024 count=100 > "$ENTROPY_FILE"
-    log "$LOGS_DIR" "$LOG_NAME" "Deterministic entropy file created at $ENTROPY_FILE"
-fi
-
 # Run Circlator with time limit
 log "$LOGS_DIR" "$LOG_NAME" "Starting Circlator processing"
 
@@ -94,8 +91,6 @@ apptainer exec \
     --bind "$(dirname "$INPUT_FILE")":/mnt/sequencing_file_dir \
     --bind "$(dirname "$assembly")":/mnt/assembly_file_dir \
     --bind "$CIRCLATOR_OUTPUT_DIR":/mnt/output \
-    --bind "$ENTROPY_FILE":/dev/random \
-    --bind "$ENTROPY_FILE":/dev/urandom \
     "$straincascade_assembly_qc_refinement_sif" \
     bash -c "source /opt/conda/etc/profile.d/conda.sh && \
              conda activate circlator_env && \

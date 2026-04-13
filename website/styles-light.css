@@ -1,0 +1,228 @@
+/*-- scss:defaults --*/
+
+/*-- scss:rules --*/
+
+/* StrainCascade Quarto theme overrides — light mode */
+
+/* Navbar stays dark regardless of theme */
+.navbar {
+  background: #2B5C8A !important;
+}
+
+.navbar-brand {
+  font-family: 'Courier New', Courier, monospace !important;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  font-size: 1.15rem;
+}
+
+.navbar .navbar-brand-container .navbar-brand {
+  font-family: 'Courier New', Courier, monospace !important;
+  font-weight: 700;
+}
+
+.navbar .navbar-brand-container .navbar-brand:hover,
+.navbar .navbar-brand-container .navbar-brand:focus {
+  color: #336392 !important;
+}
+
+/* Navbar logo sizing */
+.navbar-brand-container .navbar-brand img,
+.navbar .navbar-brand img {
+  max-height: 50px !important;
+  width: auto !important;
+}
+
+/* Code blocks — let Ayu light handle background & syntax colors */
+pre.sourceCode {
+  border-radius: 6px;
+  border-left: 3px solid #336392;
+}
+
+/* Inline code only — dark blue on light grey */
+:not(pre) > code {
+  color: #264d73 !important;
+  background-color: #f3f5f6 !important;
+}
+
+/* Plain text / ASCII code blocks */
+pre:not(.sourceCode) {
+  border-radius: 6px;
+  border-left: 3px solid #336392;
+  background-color: #f3f5f6 !important;
+}
+
+pre:not(.sourceCode) code {
+  color: #264d73 !important;
+  background-color: transparent !important;
+}
+
+/* Tables */
+.table {
+  font-size: 0.92em;
+}
+
+.table thead th {
+  border-bottom: 2px solid #336392;
+}
+
+/* Headings */
+.content h1,
+.content h2 {
+  color: #2B5C8A;
+}
+
+/* Links */
+a {
+  color: #336392;
+}
+
+a:hover,
+a:focus,
+a:active {
+  color: #264d73 !important;
+}
+
+/* Navbar hover + active — orange (bar stays dark) */
+.navbar .nav-link:hover,
+.navbar .nav-link:focus,
+.navbar .nav-link.active,
+.navbar .nav-link.show,
+.navbar .dropdown-item:hover,
+.navbar .dropdown-item:focus,
+.navbar .dropdown-item.active {
+  color: #ffffff !important;
+}
+
+.navbar .navbar-toggler {
+  border-color: #ffffff !important;
+}
+
+/* Module cards */
+.module-card {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.2em;
+  margin-bottom: 1em;
+  transition: box-shadow 0.2s;
+}
+
+.module-card:hover {
+  box-shadow: 0 2px 8px rgba(51, 99, 146, 0.2);
+}
+
+.module-card h4 {
+  margin-top: 0;
+}
+
+/* Callout tweaks */
+.callout {
+  border-radius: 6px;
+}
+
+.callout-tip {
+  border-left-color: #336392 !important;
+}
+
+.callout-note {
+  border-left-color: #336392 !important;
+}
+
+/* Module name styling */
+.module-name {
+  font-weight: 700;
+  color: #336392;
+}
+
+/* Performance table highlight */
+.perf-highlight {
+  font-weight: 600;
+  color: #336392;
+}
+
+/* Pipeline flow diagram */
+.pipeline-flow pre {
+  background-color: #f3f5f6 !important;
+  border-left: 3px solid #336392;
+  border-radius: 6px;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.pipeline-flow pre code {
+  color: #264d73 !important;
+}
+
+/* TOC */
+#quarto-margin-sidebar .nav-link:hover,
+#quarto-margin-sidebar .nav-link:focus {
+  color: #264d73 !important;
+  border-left-color: #336392 !important;
+}
+
+#quarto-margin-sidebar .nav-link.active {
+  border-left-color: #336392 !important;
+  color: #336392 !important;
+}
+
+/* Repo actions (Report an issue, View source) */
+.toc-actions a,
+.toc-actions a.toc-action,
+.sidebar .toc-actions a,
+.sidebar .toc-actions a.toc-action,
+.sidebar .toc-actions ul li a {
+  color: #336392 !important;
+}
+
+.toc-actions a:hover,
+.toc-actions a:focus,
+.toc-actions a.toc-action:hover,
+.toc-actions a.toc-action:focus,
+.sidebar .toc-actions a:hover,
+.sidebar .toc-actions a:focus,
+.sidebar .toc-actions a.toc-action:hover,
+.sidebar .toc-actions a.toc-action:focus,
+.sidebar .toc-actions ul li a:hover,
+.sidebar .toc-actions ul li a:focus {
+  color: #264d73 !important;
+}
+
+.quarto-other-links a,
+.sidebar .quarto-other-links a,
+.sidebar .quarto-other-links a:hover,
+.sidebar .quarto-other-links a:focus,
+.quarto-code-links a,
+.sidebar .quarto-code-links a,
+.sidebar .quarto-code-links a:hover,
+.sidebar .quarto-code-links a:focus {
+  color: #336392 !important;
+}
+
+.quarto-other-links a:hover,
+.quarto-other-links a:focus,
+.quarto-code-links a:hover,
+.quarto-code-links a:focus {
+  color: #264d73 !important;
+}
+
+/* Footer */
+.nav-footer {
+  font-size: 0.85em;
+  opacity: 0.85;
+  background: #2B5C8A;
+  color: #ccc;
+}
+
+.nav-footer a {
+  color: #4a90d9;
+}
+
+/* Dark/light logo switching */
+.darkmode { display: none !important; }
+.lightmode { display: inline !important; }
+
+/* Navbar footer dark on light theme too */
+.nav-footer {
+  background: #2B5C8A;
+  color: #ccc;
+}

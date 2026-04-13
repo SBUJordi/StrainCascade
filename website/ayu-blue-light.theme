@@ -1,0 +1,174 @@
+{
+    "_comments": [
+        "Custom Ayu Light — all colored tokens replaced with SC blue (#336392)",
+        "Based on: https://github.com/dempfi/ayu"
+    ],
+    "metadata": {
+        "name": "ayu Blue Light",
+        "revision": 1
+    },
+    "editor-colors": {
+        "BackgroundColor": "#fafafa",
+        "BracketMatching": "#d9dbdd",
+        "CodeFolding": "#dce8f4",
+        "CurrentLine": "#eff0f2",
+        "CurrentLineNumber": "#767676",
+        "IconBorder": "#f3f3f3",
+        "IndentationLine": "#dcdee1",
+        "LineNumbers": "#9f9f9f",
+        "MarkBookmark": "#336392",
+        "MarkBreakpointActive": "#336392",
+        "MarkBreakpointDisabled": "#336392",
+        "MarkBreakpointReached": "#336392",
+        "MarkError": "#f51818",
+        "MarkExecution": "#336392",
+        "MarkWarning": "#FA8000",
+        "ModifiedLines": "#709ecc",
+        "ReplaceHighlight": "#b0d4e4",
+        "SavedLines": "#99bf4d",
+        "SearchHighlight": "#c4daf0",
+        "Separator": "#e0dfdf",
+        "SpellChecking": "#f27983",
+        "TabMarker": "#dcdee1",
+        "TemplateBackground": "#f7f7f7",
+        "TemplateFocusedPlaceholder": "#bec1c6",
+        "TemplatePlaceholder": "#dddfe1",
+        "TemplateReadOnlyPlaceholder": "#ffffff",
+        "TextSelection": "#d1e4f4",
+        "WordWrapMarker": "#e9eaeb"
+    },
+    "text-styles": {
+        "Alert": {
+            "background-color": "#faefef",
+            "bold": true,
+            "selected-text-color": "#f51818",
+            "text-color": "#f51818"
+        },
+        "Annotation": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Attribute": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "BaseN": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "BuiltIn": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Char": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Comment": {
+            "italic": true,
+            "selected-text-color": "#a0a1a7",
+            "text-color": "#a0a1a7"
+        },
+        "CommentVar": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Constant": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "ControlFlow": {
+            "bold": true,
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "DataType": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "DecVal": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Documentation": {
+            "selected-text-color": "#a0a1a7",
+            "text-color": "#a0a1a7"
+        },
+        "Error": {
+            "selected-text-color": "#f51818",
+            "text-color": "#f51818",
+            "underline": true
+        },
+        "Extension": {
+            "bold": true,
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Float": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Function": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Import": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Information": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Keyword": {
+            "bold": true,
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Normal": {
+            "selected-text-color": "#5c6166",
+            "text-color": "#5c6166"
+        },
+        "Operator": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Others": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Preprocessor": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "RegionMarker": {
+            "background-color": "#e0edf8",
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "SpecialChar": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "SpecialString": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "String": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Variable": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "VerbatimString": {
+            "selected-text-color": "#336392",
+            "text-color": "#336392"
+        },
+        "Warning": {
+            "selected-text-color": "#FA8000",
+            "text-color": "#FA8000"
+        }
+    }
+}

@@ -2,7 +2,7 @@
 
 ## Overview
 
-StrainCascade is a modular bioinformatics tool designed to comprehensively process genomic data of bacterial isolates, supporting both long-read sequencing data (PacBio or ONT) and pre-assembled genomes as input. Its automatic and customisable workflow includes everything from genome assembly, taxonomic identification, genome annotation, functional analysis, plasmid detection, as well as screens for antimicriobial resistance genes, CAZymes, phages and more. For further information on usage visit the [StrainCascade documentation page](https://sbujordi.github.io/StrainCascade_documentation/). Below you will find the minimum necessary installation information in case you already know your way around and do not need any further information.
+StrainCascade is a modular bioinformatics pipeline designed to comprehensively process genomic data of bacterial isolates, supporting both long-read sequencing data (PacBio or ONT) and pre-assembled genomes as input. Its automatic and customisable workflow spans genome assembly (5 assemblers with consensus merging), taxonomic classification, genome annotation (including deep-learning-based DeepFRI), functional analysis, plasmid detection, antimicrobial resistance screening, CAZyme identification, phage detection (VirSorter2 + geNomad), CRISPR-Cas detection, and more — across 30 analysis modules (SC1–SC30). Version 2.0.0 adds hybrid assembly support (Unicycler + Polypolish short-read polishing) and a deterministic reproducibility mode. For further information on usage visit the [StrainCascade documentation page](https://sbujordi.github.io/StrainCascade/). Below you will find the minimum necessary installation information in case you already know your way around and do not need any further information.
 
 ## System requirements
 
@@ -10,7 +10,7 @@ StrainCascade is a modular bioinformatics tool designed to comprehensively proce
 
 -   \~ 590GB disk space for software and reference databases
 
--   For optimal performance, we recommend running StrainCascade with 32 CPU cores, with 3GB of RAM allocated per core (= total of 96GB of RAM). If you run SC15 for *de novo* tree generation more than 100GB of RAM might be required.
+-   For optimal performance, we recommend running StrainCascade with 32 CPU cores, with 3GB of RAM allocated per core (= total of 96GB of RAM). If you run SC16 for *de novo* tree generation more than 100GB of RAM might be required.
 
 ## Installation dependencies
 

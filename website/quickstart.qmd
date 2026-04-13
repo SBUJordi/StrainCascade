@@ -1,0 +1,159 @@
+---
+title: "Quick Start"
+---
+
+## From Sequencing Reads
+
+```bash
+# Minimal command — PacBio HiFi reads (default)
+straincascade -i /path/to/reads.fastq.gz
+
+# Specify sequencing type and threads
+straincascade -i reads.fastq.gz -o output/ -s pacbio-hifi -t 32
+
+# Nanopore high-quality reads
+straincascade -i reads.fastq.gz -o output/ -s nano-hq -t 32
+
+# Nanopore raw reads (older chemistry)
+straincascade -i reads.fastq.gz -o output/ -s nano-raw -t 32
+```
+
+## Hybrid Assembly (Long + Short Reads)
+
+When paired Illumina short reads are provided, Unicycler operates in hybrid assembly mode and Polypolish performs short-read polishing:
+
+```bash
+straincascade -i longreads.fastq.gz -sr1 R1.fastq.gz -sr2 R2.fastq.gz -o output/
+```
+
+## From Pre-Assembled Genomes
+
+```bash
+# Single assembly file
+straincascade -a assembly.fasta -o output/ -t 32
+
+# Directory of assembly files
+straincascade -a /path/to/assemblies/ -o output/ -t 32
+```
+
+::: {.callout-note}
+When using `-a`, assembly modules (SC1–SC10, SC12, SC13) are automatically skipped. The pipeline starts from quality control (SC14) onwards.
+:::
+
+## Deterministic Mode
+
+For full reproducibility, use deterministic mode. This forces single-threaded execution and uses a fixed entropy source:
+
+```bash
+straincascade -i reads.fastq.gz -o output/ --deterministic
+```
+
+## Execution Modes
+
+Control which modules run using execution modes or bundles:
+
+```bash
+# Execution modes
+straincascade -i reads.fastq.gz -e minimal      # Assembly + QC only
+straincascade -i reads.fastq.gz -e efficient     # Core modules
+straincascade -i reads.fastq.gz -e standard      # Default
+straincascade -i reads.fastq.gz -e comprehensive # All modules
+
+# Custom module selection
+straincascade -i reads.fastq.gz -e 'custom:SC1,SC2,SC5,SC14,SC15,SC17'
+
+# Bundles (predefined module groups)
+straincascade -i reads.fastq.gz -b assembly     # Assembly modules only
+straincascade -i reads.fastq.gz -b annotation   # Annotation modules only
+straincascade -i reads.fastq.gz -b functional   # Functional analysis
+straincascade -i reads.fastq.gz -b phage        # Phage detection
+```
+
+## SLURM Submission
+
+StrainCascade is resource-intensive — use an HPC environment for optimal performance.
+
+```bash
+#!/bin/bash
+#SBATCH --job-name="StrainCascade"
+#SBATCH --output=StrainCascade_%j.out
+#SBATCH --cpus-per-task=32
+#SBATCH --mem-per-cpu=3G
+#SBATCH --partition=your_partition
+
+straincascade -i /path/to/reads.fastq.gz -t 32
+```
+
+Submit with:
+
+```bash
+sbatch your_script.sh
+```
+
+## High-Throughput SBATCH
+
+For processing multiple files, use the provided batch submission scripts:
+
+```bash
+# Navigate to the StrainCascade directory
+cd $(dirname $(which straincascade))/..
+
+# From sequencing files
+./scripts/SBATCH_scripts/StrainCascade_high_throughput_SBATCH_sequencing_files.sh \
+    -i /path/to/input_directory -p my_partition
+
+# From assembly files
+./scripts/SBATCH_scripts/StrainCascade_high_throughput_SBATCH_assembly_files.sh \
+    -i /path/to/input_directory -p my_partition
+
+# With all options
+./scripts/SBATCH_scripts/StrainCascade_high_throughput_SBATCH_sequencing_files.sh \
+    -i /path/to/input_directory -p my_partition \
+    -s pacbio-hifi -n user@example.com -f file_list.txt
+```
+
+::: {.callout-tip}
+When submitting SLURM jobs with multiple StrainCascade installations, activate the correct conda environment in your SBATCH script to ensure the appropriate `PATH` is used.
+:::
+
+## CLI Reference
+
+```
+Usage: straincascade [OPTIONS]
+
+Input options:
+  -i FILE/DIR       Input reads file or directory (mutually exclusive with -a)
+  -a FILE/DIR       Input assembly file or directory (mutually exclusive with -i)
+  -sr1 FILE         Paired short reads R1 (optional, for hybrid mode)
+  -sr2 FILE         Paired short reads R2 (optional, for hybrid mode)
+  -ea DIR           External assembly directory (optional)
+
+Output options:
+  -o DIR            Output directory (default: current directory)
+  -r TYPE           Result type: all | main | R (default: main)
+  -f yes/no         Force overwrite (default: yes)
+
+Execution options:
+  -s TYPE           Sequencing type (default: pacbio-hifi)
+                    Options: pacbio-raw | pacbio-corr | pacbio-hifi |
+                             nano-raw | nano-corr | nano-hq
+  -t INT            Number of threads (default: 32)
+  -e MODE           Execution mode (mutually exclusive with -b)
+                    Options: minimal | efficient | standard | comprehensive |
+                             custom:modules
+  -b BUNDLE         Bundle name (mutually exclusive with -e)
+                    Options: assembly | annotation | functional | phage
+  -sa ALGO          Selection algorithm: contig | continuity (default: contig)
+  -l STRING         Locus tag (default: automatic)
+  --deterministic   Optimise for reproducibility (single-threaded)
+  --heuristic       Default mode (multi-threaded)
+
+Update options:
+  -us               Update StrainCascade software
+  -uai              Update Apptainer images
+  -udb              Update databases
+
+General options:
+  -h, --help        Show detailed help
+  -v, --version     Show version
+```

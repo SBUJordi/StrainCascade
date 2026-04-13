@@ -10,13 +10,22 @@
 set -euo pipefail
 export LC_ALL=C
 
+# Ensure TMPDIR is set to a writable location (avoid /scratch/local issues on HPC)
+# If TMPDIR is not set or not writable, use output directory
+if [[ -z "${TMPDIR:-}" ]] || [[ ! -d "${TMPDIR:-}" ]] || [[ ! -w "${TMPDIR:-}" ]]; then
+    export TMPDIR="${5}/tmp_straincascade_$$"
+    export TEMP="$TMPDIR"
+    export TMP="$TMPDIR"
+    mkdir -p "$TMPDIR"
+fi
+
 # Input validation and usage
-if [[ $# -ne 17 ]]; then
+if [[ $# -ne 19 ]]; then
     cat << EOF
 Usage: $0 <script_dir> <utils_file> <input_file> <external_assembly_dir> <output_directory> <databases_dir> 
           <apptainer_images_dir> <sequencing_type> <input_type> <threads> 
           <selected_modules> <result_type> <selection_algorithm> <force_overwrite> 
-          <locus_tag> <reproducibility_mode> <version>
+          <locus_tag> <reproducibility_mode> <version> <short_reads_r1> <short_reads_r2>
 EOF
     exit 1
 fi
@@ -39,6 +48,8 @@ readonly FORCE_OVERWRITE="${14}"
 readonly LOCUS_TAG="${15}"
 readonly REPRODUCIBILITY_MODE="${16}"
 readonly VERSION="${17}"
+readonly SHORT_READS_R1="${18}"
+readonly SHORT_READS_R2="${19}"
 
 # Get the current timestamp
 START_TIME=$(date +"%Y-%m-%d %H:%M:%S")
@@ -91,6 +102,18 @@ done
 readonly LOGS_DIR="${MAIN_RESULTS_DIR}/pipeline_logs"
 create_directory "$LOGS_DIR"
 
+# Display logo and startup message
+print_header
+echo -e "${C_BOLD}Pipeline Execution Started${C_RESET}"
+echo -e "${C_DIM}─────────────────────────────────────────────────────────────────${C_RESET}"
+echo -e "  ${C_BLUE}Sample:${C_RESET}      ${sample_name}"
+echo -e "  ${C_BLUE}Mode:${C_RESET}        ${REPRODUCIBILITY_MODE}"
+echo -e "  ${C_BLUE}Threads:${C_RESET}     ${THREADS}"
+echo -e "  ${C_BLUE}Sequencing:${C_RESET}  ${SEQUENCING_TYPE}"
+echo -e "  ${C_BLUE}Output:${C_RESET}      ${OUTPUT_DIR}"
+echo -e "${C_DIM}─────────────────────────────────────────────────────────────────${C_RESET}"
+echo
+
 # Function to execute a module
 execute_module() {
     local module_script="$1"
@@ -113,7 +136,10 @@ input_handler_output=$(execute_module "StrainCascade_input_file_handler.sh" \
     "$OUTPUT_DIR" \
     "${dir_paths[sequencing_reads]}" \
     "${dir_paths[genome_assembly]}" \
-    "$INPUT_TYPE")
+    "$INPUT_TYPE" \
+    "$SHORT_READS_R1" \
+    "$SHORT_READS_R2" \
+    "$THREADS")
 
 if [[ $? -ne 0 ]]; then
     log "$LOGS_DIR" "$LOG_NAME" "Error: Input file handling failed"
@@ -121,12 +147,14 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Parse input handler output
-IFS=$'\t' read -r processed_input bam_file <<< "$input_handler_output"
+IFS=$'\t' read -r processed_input bam_file processed_short_r1 processed_short_r2 <<< "$input_handler_output"
 
 # Log input processing results
 log "$LOGS_DIR" "$LOG_NAME" "Original input: $INPUT_FILE"
 log "$LOGS_DIR" "$LOG_NAME" "Processed input: $processed_input"
 log "$LOGS_DIR" "$LOG_NAME" "BAM file: ${bam_file:-None}"
+log "$LOGS_DIR" "$LOG_NAME" "Short reads R1: ${processed_short_r1:-None}"
+log "$LOGS_DIR" "$LOG_NAME" "Short reads R2: ${processed_short_r2:-None}"
 
 # Change to base directory
 cd "$BASE_DIR" || {
@@ -141,18 +169,20 @@ declare -A module_params=(
     ["StrainCascade_Flye_assembly.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $OUTPUT_DIR $sample_name $SEQUENCING_TYPE $THREADS ${dir_paths[genome_assembly]} $REPRODUCIBILITY_MODE"
     ["StrainCascade_Canu_assembly.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $OUTPUT_DIR $sample_name $SEQUENCING_TYPE $THREADS ${dir_paths[genome_assembly]} $REPRODUCIBILITY_MODE"
     ["StrainCascade_SPAdes_assembly.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $OUTPUT_DIR $sample_name $SEQUENCING_TYPE $THREADS ${dir_paths[genome_assembly]} $REPRODUCIBILITY_MODE"
+    ["StrainCascade_Unicycler_assembly.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $OUTPUT_DIR $sample_name $SEQUENCING_TYPE $THREADS ${dir_paths[genome_assembly]} $REPRODUCIBILITY_MODE $processed_short_r1 $processed_short_r2"
     ["StrainCascade_assembly_evaluation1.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} $SELECTION_ALGORITHM"
     ["StrainCascade_MAC2_assembly_merging.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name ${dir_paths[genome_assembly]}"
     ["StrainCascade_assembly_evaluation2.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} $SELECTION_ALGORITHM"
     ["StrainCascade_Circlator_circularisation.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $OUTPUT_DIR $sample_name ${dir_paths[genome_assembly]} ${dir_paths[results_integration]} $VERSION"
     ["StrainCascade_assembly_evaluation3.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[results_integration]} $VERSION $SELECTION_ALGORITHM"
-    ["StrainCascade_arrow_medaka_polishing.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $bam_file $OUTPUT_DIR $sample_name $SEQUENCING_TYPE $THREADS ${dir_paths[genome_assembly]} $REPRODUCIBILITY_MODE"
-    ["StrainCascade_NGMLR_BBMap_coverage.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $OUTPUT_DIR $sample_name $SEQUENCING_TYPE $THREADS ${dir_paths[genome_assembly]}"
+    ["StrainCascade_assembly_polishing.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $bam_file $OUTPUT_DIR $sample_name $SEQUENCING_TYPE $THREADS ${dir_paths[genome_assembly]} $REPRODUCIBILITY_MODE ${dir_paths[results_integration]} $VERSION $processed_short_r1 $processed_short_r2"
+    ["StrainCascade_minimap2_BBMap_coverage.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $OUTPUT_DIR $sample_name $SEQUENCING_TYPE $THREADS ${dir_paths[genome_assembly]}"
     ["StrainCascade_CheckM2_QC.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[results_integration]} $DATABASES_DIR $VERSION"
     ["StrainCascade_GTDB-Tk_taxonomy.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[taxonomic_classification]} ${dir_paths[results_integration]} $DATABASES_DIR $VERSION"
     ["StrainCascade_GTDB-Tk_de_novo_tree.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $EXTERNAL_ASSEMBLY_DIR $THREADS ${dir_paths[genome_assembly]} ${dir_paths[taxonomic_classification]} $DATABASES_DIR"
     ["StrainCascade_Bakta_annotation.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[taxonomic_classification]} ${dir_paths[genome_annotation]} ${dir_paths[results_integration]} $DATABASES_DIR $LOCUS_TAG $FORCE_OVERWRITE $VERSION $REPRODUCIBILITY_MODE"
     ["StrainCascade_Prokka_annotation.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[genome_annotation]} ${dir_paths[results_integration]} $LOCUS_TAG $FORCE_OVERWRITE $VERSION $REPRODUCIBILITY_MODE"
+    ["StrainCascade_DeepFRI_annotation.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name ${dir_paths[genome_annotation]} ${dir_paths[results_integration]} $VERSION $REPRODUCIBILITY_MODE"
     ["StrainCascade_MicrobeAnnotator_annotation.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_annotation]} ${dir_paths[functional_analysis]} ${dir_paths[results_integration]} $DATABASES_DIR $VERSION $REPRODUCIBILITY_MODE"
     ["StrainCascade_PlasmidFinder_identification.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name ${dir_paths[genome_assembly]} ${dir_paths[results_integration]} $DATABASES_DIR $VERSION"
     ["StrainCascade_AMRFinderPlus_antimicrobial_resistance_identification.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[taxonomic_classification]} ${dir_paths[functional_analysis]} ${dir_paths[results_integration]} $DATABASES_DIR $VERSION"
@@ -160,7 +190,7 @@ declare -A module_params=(
     ["StrainCascade_dbCAN3_CAZymes_identification.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[functional_analysis]} ${dir_paths[results_integration]} $DATABASES_DIR $VERSION"
     ["StrainCascade_IslandPath_genomic_islands_identification.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name ${dir_paths[genome_assembly]} ${dir_paths[genome_annotation]} ${dir_paths[functional_analysis]} ${dir_paths[results_integration]} $VERSION"
     ["StrainCascade_VirSorter2_phage_identification.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[functional_analysis]} ${dir_paths[results_integration]} $DATABASES_DIR $VERSION"
-    ["StrainCascade_DeepVirFinder_phage_identification.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $processed_input $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[functional_analysis]}"
+    ["StrainCascade_geNomad_phage_identification.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[functional_analysis]} ${dir_paths[results_integration]} $DATABASES_DIR $VERSION"
     ["StrainCascade_CRISPRCasFinder_identification.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[functional_analysis]} ${dir_paths[results_integration]} $VERSION"
     ["StrainCascade_ISEScan_IS_elements_identification.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR $OUTPUT_DIR $sample_name $THREADS ${dir_paths[genome_assembly]} ${dir_paths[functional_analysis]} ${dir_paths[results_integration]} $VERSION"
     ["StrainCascade_data_integration.sh"]="$LOG_NAME $UTILS_FILE $APPTAINER_IMAGES_DIR ${dir_paths[genome_assembly]} ${dir_paths[results_integration]} $VERSION $sample_name"
@@ -170,7 +200,7 @@ declare -A module_params=(
 IFS=' ' read -r -a modules <<< "$SELECTED_MODULES"
 for module in "${modules[@]}"; do
     # Skip assembly-dependent modules if input is assembly
-    if [[ "$INPUT_TYPE" == "assembly" ]] && [[ "$module" =~ (Canu|LJA|SPAdes|Flye|evaluation[12]|MAC2|Circlator|arrow_medaka|NGMLR|DeepVirFinder) ]]; then
+    if [[ "$INPUT_TYPE" == "assembly" ]] && [[ "$module" =~ (Canu|LJA|SPAdes|Flye|Unicycler|evaluation[12]|MAC2|Circlator|assembly_polishing|BBMap) ]]; then
         log "$LOGS_DIR" "$LOG_NAME" "Skipping $module: Assembly input provided"
         continue
     fi

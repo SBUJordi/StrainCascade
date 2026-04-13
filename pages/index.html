@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StrainCascade — Bacterial Genome Assembly &amp; Annotation Pipeline</title>
+    <meta name="description" content="Modular bioinformatics pipeline for comprehensive bacterial genome assembly, annotation, and functional analysis from long-read sequencing data.">
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #0a0a0a;
+            --border: #1a1a1a;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #4a90d9;
+            --accent-hover: #6aa8e8;
+            --green: #3fb950;
+            --blue: #336392;
+            --orange: #FA8000;
+            --grad-start: #1a2a3a;
+            --grad-mid: #336392;
+            --grad-end: #FA8000;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+            width: 100%;
+        }
+
+        /* Header */
+        header {
+            padding: 3rem 0 2rem;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-logo {
+            max-width: 420px;
+            width: 80%;
+            margin-bottom: 1.5rem;
+        }
+
+        .header-subtitle {
+            font-size: 1.05rem;
+            color: var(--text-muted);
+            margin-bottom: 1.2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .badge-row {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .badge {
+            display: inline-block;
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 0.25em 0.7em;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .badge--blue { color: var(--accent); border-color: var(--accent); }
+        .badge--green { color: var(--green); border-color: var(--green); }
+        .badge--orange { color: var(--orange); border-color: var(--orange); }
+
+        .header-links {
+            margin-top: 1.2rem;
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .header-links a {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .btn-docs {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--grad-mid), var(--grad-end));
+            color: #fff !important;
+            padding: 0.55em 1.8em;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            transition: opacity 0.15s;
+        }
+
+        .btn-docs:hover {
+            opacity: 0.88;
+            text-decoration: none;
+        }
+
+        /* Main */
+        main {
+            flex: 1;
+            padding: 2rem 0;
+        }
+
+        section {
+            margin-bottom: 2.5rem;
+        }
+
+        section h2 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.8rem;
+            padding-bottom: 0.3rem;
+            border-bottom: 1px solid var(--border);
+            border-image: linear-gradient(to right, var(--grad-mid), var(--grad-end)) 1;
+        }
+
+        /* Pipeline stages */
+        .stage-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .stage-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+        }
+
+        .stage-card .stage-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-bottom: 0.3rem;
+            color: var(--accent);
+        }
+
+        .stage-card .stage-desc {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+
+        .stage-card .stage-modules {
+            font-size: 0.78rem;
+            color: var(--accent);
+            margin-top: 0.4rem;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        }
+
+        /* Module table */
+        .module-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+        }
+
+        .module-table th,
+        .module-table td {
+            text-align: left;
+            padding: 0.45rem 0.6rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .module-table th {
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .module-table td:first-child {
+            font-weight: 600;
+            color: var(--accent);
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.85em;
+        }
+
+        .mono {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.88em;
+        }
+
+        /* Code block */
+        pre {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem 1.2rem;
+            overflow-x: auto;
+            font-size: 0.88rem;
+            line-height: 1.55;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        }
+
+        pre .comment { color: var(--text-muted); }
+        pre .cmd { color: var(--text); }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-card .label {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+        }
+
+        /* Citation */
+        blockquote {
+            background: var(--surface);
+            border-left: 3px solid var(--blue);
+            padding: 0.8rem 1.2rem;
+            border-radius: 0 6px 6px 0;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        /* Footer */
+        footer {
+            padding: 1.5rem 0;
+            text-align: center;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+        }
+
+        footer a { color: var(--text-muted); }
+        footer a:hover { color: var(--accent); }
+
+        @media (max-width: 600px) {
+            .header-logo { max-width: 260px; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .stage-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="container">
+        <img src="images/straincascade_logo_white.png" alt="StrainCascade" class="header-logo">
+        <div class="header-subtitle">
+            Modular bacterial genome assembly &amp; annotation pipeline for long-read sequencing data
+        </div>
+        <div class="badge-row">
+            <span class="badge badge--blue">30 modules</span>
+            <span class="badge badge--blue">5 assemblers</span>
+            <span class="badge badge--blue">hybrid assembly</span>
+            <span class="badge badge--blue">deterministic mode</span>
+            <span class="badge badge--blue">Apptainer containers</span>
+        </div>
+        <div class="header-links">
+            <a class="btn-docs" href="docs/">Full Documentation →</a>
+            <a href="https://github.com/SBUJordi/StrainCascade">GitHub</a>
+        </div>
+    </div>
+</header>
+
+<main>
+    <div class="container">
+
+        <section>
+            <h2>Pipeline Stages</h2>
+            <div class="stage-grid">
+                <div class="stage-card">
+                    <div class="stage-title">Read Processing</div>
+                    <div class="stage-desc">Long-read correction &amp; trimming with Canu</div>
+                    <div class="stage-modules">SC1</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">Multi-Assembler</div>
+                    <div class="stage-desc">LJA, SPAdes, Canu, Flye, Unicycler — consensus merging via MAC2</div>
+                    <div class="stage-modules">SC2–SC8</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">Refinement</div>
+                    <div class="stage-desc">Circularization, polishing (Arrow/Medaka + Polypolish), coverage</div>
+                    <div class="stage-modules">SC9–SC13</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">Quality Control</div>
+                    <div class="stage-desc">CheckM2 completeness &amp; contamination assessment</div>
+                    <div class="stage-modules">SC14</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">Taxonomy</div>
+                    <div class="stage-desc">GTDB-Tk classification &amp; <em>de novo</em> phylogenetic trees</div>
+                    <div class="stage-modules">SC15–SC16</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">Annotation</div>
+                    <div class="stage-desc">Bakta, Prokka, DeepFRI (deep-learning GO/EC), MicrobeAnnotator</div>
+                    <div class="stage-modules">SC17–SC20</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">Functional Screens</div>
+                    <div class="stage-desc">Plasmids, AMR, CAZymes, genomic islands, phages, CRISPR, IS elements</div>
+                    <div class="stage-modules">SC21–SC29</div>
+                </div>
+                <div class="stage-card">
+                    <div class="stage-title">Integration</div>
+                    <div class="stage-desc">Consolidated results &amp; interactive HTML report</div>
+                    <div class="stage-modules">SC30</div>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>At a Glance</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="value">30</div>
+                    <div class="label">Analysis modules</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">5</div>
+                    <div class="label">Assembly algorithms</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">PacBio + ONT</div>
+                    <div class="label">Sequencing platforms</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">Hybrid</div>
+                    <div class="label">Short-read support</div>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Install</h2>
+<pre><span class="comment"># Clone and install</span>
+<span class="cmd">git clone https://github.com/SBUJordi/StrainCascade.git</span>
+<span class="cmd">cd StrainCascade</span>
+<span class="cmd">find scripts/ -type f -exec chmod +x {} \;</span>
+<span class="cmd">./scripts/StrainCascade_installation.sh</span></pre>
+        </section>
+
+        <section>
+            <h2>Quick Start</h2>
+<pre><span class="comment"># From long-read sequencing data</span>
+<span class="cmd">straincascade -i reads.fastq.gz -o output/ -s pacbio-hifi -t 32</span>
+
+<span class="comment"># Hybrid assembly (long + short reads)</span>
+<span class="cmd">straincascade -i longreads.fastq.gz -sr1 R1.fastq.gz -sr2 R2.fastq.gz -o output/</span>
+
+<span class="comment"># From pre-assembled genome</span>
+<span class="cmd">straincascade -a assembly.fasta -o output/ -t 32</span>
+
+<span class="comment"># Deterministic mode for full reproducibility</span>
+<span class="cmd">straincascade -i reads.fastq.gz -o output/ --deterministic</span></pre>
+        </section>
+
+        <section>
+            <h2>Citation</h2>
+            <blockquote>
+                Jordi SBU et al. StrainCascade: A modular pipeline for comprehensive bacterial genome assembly and annotation from long-read sequencing data. <em>[Journal]</em> (2025). [DOI]
+            </blockquote>
+        </section>
+
+    </div>
+</main>
+
+<footer>
+    <div class="container">
+        StrainCascade v2.0.0 · MIT-0 License · University of Bern
+        · <a href="https://github.com/SBUJordi/StrainCascade">Source</a>
+        · <a href="docs/">Documentation</a>
+    </div>
+</footer>
+
+</body>
+</html>

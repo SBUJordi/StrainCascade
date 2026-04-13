@@ -48,11 +48,13 @@ else
     readonly THREADS="${INITIAL_THREADS}"
 fi
 
-# Create deterministic entropy source
-readonly ENTROPY_FILE="$OUTPUT_DIR/deterministic_entropy_file"
-if [[ ! -f "$ENTROPY_FILE" ]]; then
-    dd if=/dev/zero bs=1024 count=100 > "$ENTROPY_FILE"
-    log "$LOGS_DIR" "StrainCascade.log" "Deterministic entropy file created at $ENTROPY_FILE"
+# Entropy source binding for deterministic reproducibility only
+# Using /dev/zero (infinite stream) instead of a finite file to prevent
+# exhaustion-related hangs during long-running annotation stages
+ENTROPY_ARGS=()
+if [[ "${REPRODUCIBILITY_MODE}" == "deterministic" ]]; then
+    ENTROPY_ARGS=(--bind /dev/zero:/dev/random --bind /dev/zero:/dev/urandom)
+    log "$LOGS_DIR" "$LOG_NAME" "Deterministic mode: binding /dev/zero as entropy source"
 fi
 
 # Derived constants
@@ -103,8 +105,7 @@ apptainer exec \
     --bind "$(dirname "$faa_file_to_use")":/mnt/input \
     --bind "$MICROBEANNOTATOR_OUTPUT_DIR":/mnt/output \
     --bind "$DATABASES_DIR/microbeannotator_db":/mnt/microbeannotator_db \
-    --bind "$ENTROPY_FILE":/dev/random \
-    --bind "$ENTROPY_FILE":/dev/urandom \
+    ${ENTROPY_ARGS[@]+"${ENTROPY_ARGS[@]}"} \
     "$straincascade_genome_annotation_sif" \
     bash -c "source /opt/conda/etc/profile.d/conda.sh && \
              conda activate microbeannotator_env && \

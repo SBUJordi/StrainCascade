@@ -99,73 +99,105 @@ echo "Collecting tool version information..."
 
 # Core tool versions
 PYTHON_VERSION=$(apptainer exec "$python_3_12_4_sif" bash -c "python --version" 2>&1 | grep -E "Python" | awk '{print $2}')
+[[ -z "$PYTHON_VERSION" ]] && PYTHON_VERSION="N/A"
 echo "Python version: $PYTHON_VERSION"
 
 R_VERSION=$(apptainer exec "$r_4_4_1_sif" bash -c "R --version" 2>&1 | grep -E "R version" | awk '{print $3}')
+[[ -z "$R_VERSION" ]] && R_VERSION="N/A"
 echo "R version: $R_VERSION"
 
 # Assembly tools
 LJA_VERSION="0.2"
 echo "LJA version: $LJA_VERSION"
 
-SPADES_VERSION=$(apptainer exec "$straincascade_genome_assembly_sif" bash -c "source activate spades_env && spades.py --version" 2>&1 | grep -E "SPAdes" | awk '{print $4}' | sed 's/^[a-zA-Z]//')
+SPADES_VERSION=$(apptainer exec "$straincascade_genome_assembly_sif" bash -c "source activate spades_env && spades.py --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$SPADES_VERSION" ]] && SPADES_VERSION="N/A"
 echo "SPAdes version: $SPADES_VERSION"
 
-CANU_VERSION=$(apptainer exec "$straincascade_genome_assembly_sif" bash -c "source activate genome_assembly_env && canu --version" 2>&1 | awk '{print $2}' | sed 's/^[a-zA-Z]//')
+CANU_VERSION=$(apptainer exec "$straincascade_genome_assembly_sif" bash -c "source activate genome_assembly_env && canu --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$CANU_VERSION" ]] && CANU_VERSION="N/A"
 echo "Canu version: $CANU_VERSION"
 
 FLYE_VERSION=$(apptainer exec "$straincascade_genome_assembly_sif" bash -c "source activate genome_assembly_env && flye --version" 2>&1)
+[[ -z "$FLYE_VERSION" ]] && FLYE_VERSION="N/A"
 echo "Flye version: $FLYE_VERSION"
+
+UNICYCLER_VERSION=$(apptainer exec "$straincascade_genome_assembly_sif" bash -c "source activate genome_assembly_env && unicycler --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$UNICYCLER_VERSION" ]] && UNICYCLER_VERSION="N/A"
+echo "Unicycler version: $UNICYCLER_VERSION"
 
 
 # QC tools
 MAC2_VERSION="2.1 (with MUMmer 4.0.0rc1)"
 echo "MAC2 version: $MAC2_VERSION"
 
-CIRCLATOR_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate circlator_env && circlator version" 2>&1 | sed 's/^[a-zA-Z]//')
+CIRCLATOR_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate circlator_env && circlator version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$CIRCLATOR_VERSION" ]] && CIRCLATOR_VERSION="N/A"
 echo "Circlator version: $CIRCLATOR_VERSION"
 
-ARROW_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate genomicconsensus_env && arrow --version" 2>&1 | sed 's/^[a-zA-Z]//')
+ARROW_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate genomicconsensus_env && arrow --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$ARROW_VERSION" ]] && ARROW_VERSION="N/A"
 echo "Arrow version: $ARROW_VERSION"
 
 MEDAKA_VERSION="1.11.3"
 echo "Medaka version: $MEDAKA_VERSION"
 
-NGMLR_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate bbmap_ngmlr_env && ngmlr" 2>&1 | head -n 1 | awk '{print $2}' | sed 's/^[a-zA-Z]//')
-echo "NGMLR version: $NGMLR_VERSION"
+RACON_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate racon_env && racon --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$RACON_VERSION" ]] && RACON_VERSION="N/A"
+echo "Racon version: $RACON_VERSION"
 
-BBMAP_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate bbmap_ngmlr_env && bbmap.sh -v" 2>&1 | sed -n '3p' | awk '{print $2}' | sed 's/^[a-zA-Z]//')
+MINIMAP2_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate racon_env && minimap2 --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+[^ ]*' | head -1)
+[[ -z "$MINIMAP2_VERSION" ]] && MINIMAP2_VERSION="N/A"
+echo "minimap2 version: $MINIMAP2_VERSION"
+
+POLYPOLISH_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" polypolish --version 2>&1 | awk '{print $2}')
+[[ -z "$POLYPOLISH_VERSION" ]] && POLYPOLISH_VERSION="N/A"
+echo "Polypolish version: $POLYPOLISH_VERSION"
+
+BBMAP_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate bbmap_env && bbmap.sh -v" 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+[[ -z "$BBMAP_VERSION" ]] && BBMAP_VERSION="N/A"
 echo "BBMap version: $BBMAP_VERSION"
 
-QUAST_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate quast_env && quast.py --version" 2>&1 | grep -E "QUAST" | awk '{print $2}' | sed 's/^[a-zA-Z]//')
+QUAST_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate quast_env && quast.py --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$QUAST_VERSION" ]] && QUAST_VERSION="N/A"
 echo "QUAST version: $QUAST_VERSION"
 
-CHECKM2_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate checkm2_env && checkm2 --version" 2>&1 | sed 's/^[a-zA-Z]//')
+CHECKM2_VERSION=$(apptainer exec "$straincascade_assembly_qc_refinement_sif" bash -c "source activate checkm2_env && checkm2 --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$CHECKM2_VERSION" ]] && CHECKM2_VERSION="N/A"
 echo "CheckM2 version: $CHECKM2_VERSION"
 
 
 # Genome annotation tools
-BAKTA_VERSION=$(apptainer exec "$straincascade_genome_annotation_sif" bash -c "source activate bakta_env && bakta --version" 2>&1 | sed -n 's/^bakta \([0-9.]*\).*/\1/p')
+BAKTA_VERSION=$(apptainer exec "$straincascade_genome_annotation_sif" bash -c "source activate bakta_env && bakta --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$BAKTA_VERSION" ]] && BAKTA_VERSION="N/A"
 echo "Bakta version: $BAKTA_VERSION"
 
-PROKKA_VERSION=$(apptainer exec "$straincascade_genome_annotation_sif" bash -c "source activate prokka_env && prokka --version" 2>&1 | awk '{print $2}' | sed 's/^[a-zA-Z]//')
+PROKKA_VERSION=$(apptainer exec "$straincascade_genome_annotation_sif" bash -c "source activate prokka_env && prokka --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$PROKKA_VERSION" ]] && PROKKA_VERSION="N/A"
 echo "Prokka version: $PROKKA_VERSION"
 
-MICROBEANNOTATOR_VERSION=$(apptainer exec "$straincascade_genome_annotation_sif" bash -c "source activate microbeannotator_env && microbeannotator --version" 2>&1 | awk '{print $2}' | sed 's/^[a-zA-Z]//')
+DEEPFRI_VERSION="1.1"
+echo "DeepFRI version: $DEEPFRI_VERSION"
+
+MICROBEANNOTATOR_VERSION=$(apptainer exec "$straincascade_genome_annotation_sif" bash -c "source activate microbeannotator_env && microbeannotator --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$MICROBEANNOTATOR_VERSION" ]] && MICROBEANNOTATOR_VERSION="N/A"
 echo "MicrobeAnnotator version: $MICROBEANNOTATOR_VERSION"
 
 
 # Taxonomy and functional analysis tools
-GTDBTK_VERSION=$(apptainer exec "$straincascade_taxonomic_functional_analysis_sif" bash -c "source activate gtdbtk_env && gtdbtk -v" 2>&1 | awk '{print $3}' | sed 's/^[a-zA-Z]//')
+GTDBTK_VERSION=$(apptainer exec "$straincascade_taxonomic_functional_analysis_sif" bash -c "source activate gtdbtk_env && gtdbtk -v" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$GTDBTK_VERSION" ]] && GTDBTK_VERSION="N/A"
 echo "GTDB-Tk version: $GTDBTK_VERSION"
 
 PLASMIDFINDER_VERSION="2.1.6"
 echo "PlasmidFinder version: $PLASMIDFINDER_VERSION"
 
-AMRFINDERPLUS_VERSION=$(apptainer exec "$straincascade_taxonomic_functional_analysis_sif" bash -c "source activate amrfinderplus_env && amrfinder --version" 2>&1 | sed 's/^[a-zA-Z]//')
+AMRFINDERPLUS_VERSION=$(apptainer exec "$straincascade_taxonomic_functional_analysis_sif" bash -c "source activate amrfinderplus_env && amrfinder --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$AMRFINDERPLUS_VERSION" ]] && AMRFINDERPLUS_VERSION="N/A"
 echo "AMRFinderPlus version: $AMRFINDERPLUS_VERSION"
 
-RESFINDER_VERSION=$(apptainer exec "$straincascade_taxonomic_functional_analysis_sif" bash -c "source activate resfinder_env && run_resfinder.py --version" 2>&1 | sed 's/^[a-zA-Z]//')
+RESFINDER_VERSION=$(apptainer exec "$straincascade_taxonomic_functional_analysis_sif" bash -c "source activate resfinder_env && run_resfinder.py --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$RESFINDER_VERSION" ]] && RESFINDER_VERSION="N/A"
 echo "ResFinder version: $RESFINDER_VERSION"
 
 DBCAN_VERSION="4.1.4"
@@ -174,17 +206,20 @@ echo "dbCAN version: $DBCAN_VERSION"
 ISLANDPATH_VERSION="1.0.6"
 echo "IslandPath version: $ISLANDPATH_VERSION"
 
-VIRSORTER2_VERSION=$(apptainer exec "$straincascade_crisprcas_phage_is_elements_sif" bash -c "source activate virsorter2_env && virsorter run -h" 2>&1 | head -n 1 | awk '{print $5}' | sed 's/^[a-zA-Z]//')
+VIRSORTER2_VERSION=$(apptainer exec "$straincascade_crisprcas_phage_is_elements_sif" bash -c "source activate virsorter2_env && virsorter run -h" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$VIRSORTER2_VERSION" ]] && VIRSORTER2_VERSION="N/A"
 echo "VirSorter2 version: $VIRSORTER2_VERSION"
 
-DEEPVIRFINDER_VERSION="1.0 (2020.11.21)"
-echo "DeepVirFinder version: $DEEPVIRFINDER_VERSION"
+GENOMAD_VERSION=$(apptainer exec "$straincascade_crisprcas_phage_is_elements_sif" bash -c "source activate genomad_env && genomad --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+[[ -z "$GENOMAD_VERSION" ]] && GENOMAD_VERSION="N/A"
+echo "geNomad version: $GENOMAD_VERSION"
 
-CRISPRCASFINDER_VERSION=$(apptainer exec "$straincascade_crisprcas_phage_is_elements_sif" bash -c "source activate crisprcasfinder && /opt/CRISPRCasFinder/CRISPRCasFinder.pl -v" 2>&1 | sed -n '3p' | awk '{print $5}' | sed 's/^[a-zA-Z]//')
-CRISPRCASFINDER_VERSION="${CRISPRCASFINDER_VERSION%,}"
+CRISPRCASFINDER_VERSION=$(apptainer exec "$straincascade_crisprcas_phage_is_elements_sif" bash -c "source activate crisprcasfinder && /opt/CRISPRCasFinder/CRISPRCasFinder.pl -v" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$CRISPRCASFINDER_VERSION" ]] && CRISPRCASFINDER_VERSION="N/A"
 echo "CRISPRCasFinder version: $CRISPRCASFINDER_VERSION"
 
-ISESCAN_VERSION=$(apptainer exec "$straincascade_crisprcas_phage_is_elements_sif" bash -c "source activate isescan_env && isescan.py --version" 2>&1 | awk '{print $2}')
+ISESCAN_VERSION=$(apptainer exec "$straincascade_crisprcas_phage_is_elements_sif" bash -c "source activate isescan_env && isescan.py --version" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+[[ -z "$ISESCAN_VERSION" ]] && ISESCAN_VERSION="N/A"
 echo "ISEScan version: $ISESCAN_VERSION"
 
 # Module definitions with versioning
@@ -195,29 +230,31 @@ MODULE_INFO=(
     ["SC3"]="SPAdes Assembly (StrainCascade_SPAdes_assembly.sh). Using SPAdes v$SPADES_VERSION"
     ["SC4"]="Canu Assembly (StrainCascade_Canu_assembly.sh). Using Canu v$CANU_VERSION"
     ["SC5"]="Flye Assembly (StrainCascade_Flye_assembly.sh). Using Flye v$FLYE_VERSION"
-    ["SC6"]="Assembly Evaluation 1 (StrainCascade_assembly_evaluation1.sh). Using QUAST v$QUAST_VERSION for assembly assessment and StrainCascade's assembly selection algorithm for assembly selection with python v$PYTHON_VERSION"
-    ["SC7"]="MAC2.0 Assembly Merging (StrainCascade_MAC2_assembly_merging.sh). Using MAC.2 v$MAC2_VERSION"
-    ["SC8"]="Assembly Evaluation 2 (StrainCascade_assembly_evaluation2.sh). Using QUAST v$QUAST_VERSION for assembly assessment and StrainCascade's assembly selection algorithm for assembly selection with python v$PYTHON_VERSION"
-    ["SC9"]="Circlator Circularisation (StrainCascade_Circlator_circularisation.sh). Using Circlator v$CIRCLATOR_VERSION"
-    ["SC10"]="Assembly Evaluation 3 (StrainCascade_assembly_evaluation3.sh). Using QUAST v$QUAST_VERSION for assembly assessment and StrainCascade's assembly selection algorithm for assembly selection with python v$PYTHON_VERSION"
-    ["SC11"]="Arrow / Medaka Polishing (StrainCascade_arrow_medaka_polishing.sh). Using either Arrow v$ARROW_VERSION or Medaka v$MEDAKA_VERSION"
-    ["SC12"]="NGMLR BBMap Coverage (StrainCascade_NGMLR_BBMap_coverage.sh). Using either NGMLR v$NGMLR_VERSION or BBMap v$BBMAP_VERSION"
-    ["SC13"]="CheckM2 QC (StrainCascade_CheckM2_QC.sh). Using CheckM2 v$CHECKM2_VERSION"
-    ["SC14"]="GTDB-Tk Taxonomy (StrainCascade_GTDB-Tk_taxonomy.sh). Using GTDB-Tk v$GTDBTK_VERSION"
-    ["SC15"]="GTDB-Tk De Novo Tree (StrainCascade_GTDB-Tk_de_novo_tree.sh). Using GTDB-Tk v$GTDBTK_VERSION"
-    ["SC16"]="Bakta Annotation (StrainCascade_Bakta_annotation.sh). Using Bakta v$BAKTA_VERSION"
-    ["SC17"]="Prokka Annotation (StrainCascade_Prokka_annotation.sh). Using Prokka v$PROKKA_VERSION"
-    ["SC18"]="MicrobeAnnotator Annotation (StrainCascade_MicrobeAnnotator_annotation.sh). Using MicrobeAnnotator v$MICROBEANNOTATOR_VERSION"
-    ["SC19"]="PlasmidFinder Identification (StrainCascade_PlasmidFinder_identification.sh). Using PlasmidFinder v$PLASMIDFINDER_VERSION"
-    ["SC20"]="AMRFinderPlus Antimicrobial Resistance Identification (StrainCascade_AMRFinderPlus_antimicrobial_resistance_identification.sh). Using AMRFinderPlus v$AMRFINDERPLUS_VERSION"
-    ["SC21"]="ResFinder Antimicrobial Resistance Identification (StrainCascade_ResFinder_antimicrobial_resistance_identification.sh). Using ResFinder v$RESFINDER_VERSION"
-    ["SC22"]="dbCAN3 CAZymes Identification (StrainCascade_dbCAN3_CAZymes_identification.sh). Using dbCAN3 v$DBCAN_VERSION"
-    ["SC23"]="IslandPath Genomic Islands Identification (StrainCascade_IslandPath_genomic_islands_identification.sh). Using IslandPath-DIMOB v$ISLANDPATH_VERSION"
-    ["SC24"]="VirSorter2 Phage Identification (StrainCascade_VirSorter2_phage_identification.sh). Using VirSorter2 v$VIRSORTER2_VERSION"
-    ["SC25"]="DeepVirFinder Phage Identification (StrainCascade_DeepVirFinder_phage_identification.sh). Using DeepVirFinder v$DEEPVIRFINDER_VERSION"
-    ["SC26"]="CRISPRCasFinder CRISPRCas Identification (StrainCascade_CRISPRCasFinder_identification.sh). Using CRISPRCasFinder v$CRISPRCASFINDER_VERSION"
-    ["SC27"]="ISEScan Insertion Sequence Elements (StrainCascade_ISEScan_IS_elements_identification.sh). Using ISEScan v$ISESCAN_VERSION"
-    ["SC28"]="Data Integration (StrainCascade_data_integration.sh). Using R v$R_VERSION"
+    ["SC6"]="Unicycler Assembly (StrainCascade_Unicycler_assembly.sh). Using Unicycler v$UNICYCLER_VERSION"
+    ["SC7"]="Assembly Evaluation 1 (StrainCascade_assembly_evaluation1.sh). Using QUAST v$QUAST_VERSION for assembly assessment and StrainCascade's assembly selection algorithm for assembly selection with python v$PYTHON_VERSION"
+    ["SC8"]="MAC2.0 Assembly Merging (StrainCascade_MAC2_assembly_merging.sh). Using MAC.2 v$MAC2_VERSION"
+    ["SC9"]="Assembly Evaluation 2 (StrainCascade_assembly_evaluation2.sh). Using QUAST v$QUAST_VERSION for assembly assessment and StrainCascade's assembly selection algorithm for assembly selection with python v$PYTHON_VERSION"
+    ["SC10"]="Circlator Circularisation (StrainCascade_Circlator_circularisation.sh). Using Circlator v$CIRCLATOR_VERSION"
+    ["SC11"]="Assembly Evaluation 3 (StrainCascade_assembly_evaluation3.sh). Using QUAST v$QUAST_VERSION for assembly assessment and StrainCascade's assembly selection algorithm for assembly selection with python v$PYTHON_VERSION"
+    ["SC12"]="Assembly Polishing (StrainCascade_assembly_polishing.sh). Long-read: Arrow v$ARROW_VERSION, Racon v$RACON_VERSION, or Medaka v$MEDAKA_VERSION. Short-read: Polypolish v$POLYPOLISH_VERSION"
+    ["SC13"]="minimap2 BBMap Coverage (StrainCascade_minimap2_BBMap_coverage.sh). Using either minimap2 v$MINIMAP2_VERSION or BBMap v$BBMAP_VERSION"
+    ["SC14"]="CheckM2 QC (StrainCascade_CheckM2_QC.sh). Using CheckM2 v$CHECKM2_VERSION"
+    ["SC15"]="GTDB-Tk Taxonomy (StrainCascade_GTDB-Tk_taxonomy.sh). Using GTDB-Tk v$GTDBTK_VERSION"
+    ["SC16"]="GTDB-Tk De Novo Tree (StrainCascade_GTDB-Tk_de_novo_tree.sh). Using GTDB-Tk v$GTDBTK_VERSION"
+    ["SC17"]="Bakta Annotation (StrainCascade_Bakta_annotation.sh). Using Bakta v$BAKTA_VERSION"
+    ["SC18"]="Prokka Annotation (StrainCascade_Prokka_annotation.sh). Using Prokka v$PROKKA_VERSION"
+    ["SC19"]="DeepFRI Annotation (StrainCascade_DeepFRI_annotation.sh). Using DeepFRI v$DEEPFRI_VERSION"
+    ["SC20"]="MicrobeAnnotator Annotation (StrainCascade_MicrobeAnnotator_annotation.sh). Using MicrobeAnnotator v$MICROBEANNOTATOR_VERSION"
+    ["SC21"]="PlasmidFinder Identification (StrainCascade_PlasmidFinder_identification.sh). Using PlasmidFinder v$PLASMIDFINDER_VERSION"
+    ["SC22"]="AMRFinderPlus Antimicrobial Resistance Identification (StrainCascade_AMRFinderPlus_antimicrobial_resistance_identification.sh). Using AMRFinderPlus v$AMRFINDERPLUS_VERSION"
+    ["SC23"]="ResFinder Antimicrobial Resistance Identification (StrainCascade_ResFinder_antimicrobial_resistance_identification.sh). Using ResFinder v$RESFINDER_VERSION"
+    ["SC24"]="dbCAN3 CAZymes Identification (StrainCascade_dbCAN3_CAZymes_identification.sh). Using dbCAN3 v$DBCAN_VERSION"
+    ["SC25"]="IslandPath Genomic Islands Identification (StrainCascade_IslandPath_genomic_islands_identification.sh). Using IslandPath-DIMOB v$ISLANDPATH_VERSION"
+    ["SC26"]="VirSorter2 Phage Identification (StrainCascade_VirSorter2_phage_identification.sh). Using VirSorter2 v$VIRSORTER2_VERSION"
+    ["SC27"]="geNomad Phage and Plasmid Identification (StrainCascade_geNomad_phage_identification.sh). Using geNomad v$GENOMAD_VERSION"
+    ["SC28"]="CRISPRCasFinder CRISPRCas Identification (StrainCascade_CRISPRCasFinder_identification.sh). Using CRISPRCasFinder v$CRISPRCASFINDER_VERSION"
+    ["SC29"]="ISEScan Insertion Sequence Elements (StrainCascade_ISEScan_IS_elements_identification.sh). Using ISEScan v$ISESCAN_VERSION"
+    ["SC30"]="Data Integration (StrainCascade_data_integration.sh). Using R v$R_VERSION"
 )
 
 # Check source exists and copy logo with error handling
@@ -272,7 +309,8 @@ EOF
         printf "|:---------|---------:|\n"
         while [ $# -gt 0 ]; do
             local software="$1"
-            local version="$2"
+            local version="${2:-N/A}"
+            [[ -z "$version" ]] && version="N/A"
             printf "| %s | \`%s\` |\n" "$software" "$version"
             shift 2
         done
@@ -296,8 +334,10 @@ EOF
         "MAC.2" "$MAC2_VERSION" \
         "Circlator" "$CIRCLATOR_VERSION" \
         "Arrow (GenomicConsensus)" "$ARROW_VERSION" \
+        "Racon" "$RACON_VERSION" \
         "Medaka" "$MEDAKA_VERSION" \
-        "NGMLR" "$NGMLR_VERSION" \
+        "Polypolish" "$POLYPOLISH_VERSION" \
+        "minimap2" "$MINIMAP2_VERSION" \
         "BBMAP" "$BBMAP_VERSION" \
         "QUAST" "$QUAST_VERSION" \
         "CheckM2" "$CHECKM2_VERSION"
@@ -318,7 +358,7 @@ EOF
         "dbCAN3" "$DBCAN_VERSION" \
         "IslandPath" "$ISLANDPATH_VERSION" \
         "VirSorter2" "$VIRSORTER2_VERSION" \
-        "DeepVirFinder" "$DEEPVIRFINDER_VERSION" \
+        "geNomad" "$GENOMAD_VERSION" \
         "CRISPRCasFinder" "$CRISPRCASFINDER_VERSION" \
         "ISEScan" "$ISESCAN_VERSION"
 

@@ -47,13 +47,9 @@ safe_read <- function(file_path, read_function, ...) {
   })
 }
 
-# Function to safely convert to integer
+# Function to safely convert to integer (silently returns NA for non-numeric values)
 safe_as_integer <- function(x) {
-  result <- suppressWarnings(as.integer(x))
-  if (anyNA(result)) {
-    warning("Some values could not be converted to integers and were set to NA")
-  }
-  return(result)
+  suppressWarnings(as.integer(x))
 }
 
 # Read files safely
@@ -143,18 +139,27 @@ if (nrow(tsv_data) > 0) {
 if (nrow(is_sequences) > 0) {
   is_sequences <- is_sequences %>%
     mutate(
-      contig_tag_fasta = rownames(is_sequences),
+      full_header = rownames(is_sequences),
       insertion_sequence_nucleotide_code = x,
-      strand = sub(".*?([+-]).*$", "\\1", contig_tag_fasta),
-      tpase_cluster = sub(".*?[+-] (.*)", "\\1", contig_tag_fasta),
-      contig_tag_fasta = gsub("[+-][^+-]*$", "", contig_tag_fasta),
-      contig_tag_fasta = sub("_[^_]*$", "", contig_tag_fasta),
-      insertion_sequence_end_position = safe_as_integer(sub(".*_(.*)$", "\\1", contig_tag_fasta)),
-      contig_tag_fasta = sub("_[^_]*$", "", contig_tag_fasta),
-      insertion_sequence_start_position = safe_as_integer(sub(".*_(.*)$", "\\1", contig_tag_fasta)),
-      contig_tag_fasta = sub("_[^_]*$", "", contig_tag_fasta)
+      # Split header: "contig_1_314476_316624_- IS21_259" or "contig_1_684983_686492 ISL3_126|..."
+      # First part (before space) contains contig and positions, second part is cluster
+      header_parts = strsplit(full_header, " ", fixed = TRUE),
+      contig_part = sapply(header_parts, `[`, 1),
+      tpase_cluster = sapply(header_parts, function(x) if(length(x) > 1) paste(x[-1], collapse = " ") else NA_character_),
+      # Check if strand is present at the end of contig_part (e.g., "_-" or "_+")
+      has_strand = grepl("_[+-]$", contig_part),
+      strand = ifelse(has_strand, sub(".*_([+-])$", "\\1", contig_part), NA_character_),
+      # Remove strand suffix if present
+      contig_part = ifelse(has_strand, sub("_[+-]$", "", contig_part), contig_part),
+      # Now contig_part is like "contig_1_314476_316624"
+      # Extract end position (last number after underscore)
+      insertion_sequence_end_position = safe_as_integer(sub(".*_([0-9]+)$", "\\1", contig_part)),
+      contig_part = sub("_[0-9]+$", "", contig_part),
+      # Extract start position
+      insertion_sequence_start_position = safe_as_integer(sub(".*_([0-9]+)$", "\\1", contig_part)),
+      contig_tag_fasta = sub("_[0-9]+$", "", contig_part)
     ) %>%
-    select(-x)
+    select(-x, -full_header, -header_parts, -contig_part, -has_strand)
   
   isescan_results <- merge(isescan_results, is_sequences, 
                            by = c("contig_tag_fasta", "tpase_cluster", "insertion_sequence_start_position", 
@@ -163,46 +168,56 @@ if (nrow(is_sequences) > 0) {
 }
 
 # Process ORF DNA sequences if they exist
+# ORF headers: "contig_1_314943_316304_-" (with strand) or "contig_1_314943_316304" (without)
 if (nrow(orf_dna_sequences) > 0) {
   orf_dna_sequences <- orf_dna_sequences %>%
     mutate(
-      contig_tag_fasta = rownames(orf_dna_sequences),
+      contig_part = rownames(orf_dna_sequences),
       orf_nucleotide_code = x,
-      strand = sub(".*?([+-]).*$", "\\1", contig_tag_fasta),
-      contig_tag_fasta = gsub("[+-][^+-]*$", "", contig_tag_fasta),
-      contig_tag_fasta = sub("_[^_]*$", "", contig_tag_fasta),
-      insertion_sequence_end_position = safe_as_integer(sub(".*_(.*)$", "\\1", contig_tag_fasta)),
-      contig_tag_fasta = sub("_[^_]*$", "", contig_tag_fasta),
-      insertion_sequence_start_position = safe_as_integer(sub(".*_(.*)$", "\\1", contig_tag_fasta)),
-      contig_tag_fasta = sub("_[^_]*$", "", contig_tag_fasta)
+      # Check if strand is present at the end (e.g., "_-" or "_+")
+      has_strand = grepl("_[+-]$", contig_part),
+      strand = ifelse(has_strand, sub(".*_([+-])$", "\\1", contig_part), NA_character_),
+      # Remove strand suffix if present
+      contig_part = ifelse(has_strand, sub("_[+-]$", "", contig_part), contig_part),
+      # Extract end position (last number after underscore)
+      orf_end_position = safe_as_integer(sub(".*_([0-9]+)$", "\\1", contig_part)),
+      contig_part = sub("_[0-9]+$", "", contig_part),
+      # Extract start position
+      orf_start_position = safe_as_integer(sub(".*_([0-9]+)$", "\\1", contig_part)),
+      contig_tag_fasta = sub("_[0-9]+$", "", contig_part)
     ) %>%
-    select(-x)
+    select(-x, -contig_part, -has_strand)
   
   isescan_results <- merge(isescan_results, orf_dna_sequences, 
-                           by = c("contig_tag_fasta", "insertion_sequence_start_position", 
-                                  "insertion_sequence_end_position", "strand"), 
+                           by = c("contig_tag_fasta", "orf_start_position", 
+                                  "orf_end_position", "strand"), 
                            all = TRUE)
 }
 
 # Process ORF amino acid sequences if they exist
+# ORF headers: "contig_1_314943_316304_-" (with strand) or "contig_1_314943_316304" (without)
 if (nrow(orf_aa_sequences) > 0) {
   orf_aa_sequences <- orf_aa_sequences %>%
     mutate(
-      contig_tag_fasta = rownames(orf_aa_sequences),
+      contig_part = rownames(orf_aa_sequences),
       orf_amino_acid_code = x,
-      strand = sub(".*?([+-]).*$", "\\1", contig_tag_fasta),
-      contig_tag_fasta = gsub("[+-][^+-]*$", "", contig_tag_fasta),
-      contig_tag_fasta = sub("_[^_]*$", "", contig_tag_fasta),
-      insertion_sequence_end_position = safe_as_integer(sub(".*_(.*)$", "\\1", contig_tag_fasta)),
-      contig_tag_fasta = sub("_[^_]*$", "", contig_tag_fasta),
-      insertion_sequence_start_position = safe_as_integer(sub(".*_(.*)$", "\\1", contig_tag_fasta)),
-      contig_tag_fasta = sub("_[^_]*$", "", contig_tag_fasta)
+      # Check if strand is present at the end (e.g., "_-" or "_+")
+      has_strand = grepl("_[+-]$", contig_part),
+      strand = ifelse(has_strand, sub(".*_([+-])$", "\\1", contig_part), NA_character_),
+      # Remove strand suffix if present
+      contig_part = ifelse(has_strand, sub("_[+-]$", "", contig_part), contig_part),
+      # Extract end position (last number after underscore)
+      orf_end_position = safe_as_integer(sub(".*_([0-9]+)$", "\\1", contig_part)),
+      contig_part = sub("_[0-9]+$", "", contig_part),
+      # Extract start position
+      orf_start_position = safe_as_integer(sub(".*_([0-9]+)$", "\\1", contig_part)),
+      contig_tag_fasta = sub("_[0-9]+$", "", contig_part)
     ) %>%
-    select(-x)
+    select(-x, -contig_part, -has_strand)
   
   isescan_results <- merge(isescan_results, orf_aa_sequences, 
-                           by = c("contig_tag_fasta", "insertion_sequence_start_position", 
-                                  "insertion_sequence_end_position", "strand"), 
+                           by = c("contig_tag_fasta", "orf_start_position", 
+                                  "orf_end_position", "strand"), 
                            all = TRUE)
 }
 

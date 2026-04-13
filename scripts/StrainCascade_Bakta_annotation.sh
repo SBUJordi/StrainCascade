@@ -6,6 +6,8 @@
 
 # StrainCascade_Bakta_annotation.sh
 # Description: Performs Bakta genome annotation as part of StrainCascade
+# Bakta version: 1.11.4 (compatible with database schema v6.0)
+# Database changes: v6.0 uses xz compression instead of gz
 
 set -euo pipefail
 
@@ -52,11 +54,13 @@ else
     readonly THREADS="${INITIAL_THREADS}"
 fi
 
-# Create deterministic entropy source
-readonly ENTROPY_FILE="$OUTPUT_DIR/deterministic_entropy_file"
-if [[ ! -f "$ENTROPY_FILE" ]]; then
-    dd if=/dev/zero bs=1024 count=100 > "$ENTROPY_FILE"
-    log "$LOGS_DIR" "StrainCascade.log" "Deterministic entropy file created at $ENTROPY_FILE"
+# Entropy source binding for deterministic reproducibility only
+# Using /dev/zero (infinite stream) instead of a finite file to prevent
+# exhaustion-related hangs during long-running annotation stages
+ENTROPY_ARGS=()
+if [[ "${REPRODUCIBILITY_MODE}" == "deterministic" ]]; then
+    ENTROPY_ARGS=(--bind /dev/zero:/dev/random --bind /dev/zero:/dev/urandom)
+    log "$LOGS_DIR" "$LOG_NAME" "Deterministic mode: binding /dev/zero as entropy source"
 fi
 
 # Derived constants
@@ -146,12 +150,12 @@ bakta_cmd="$bakta_base_cmd /mnt/input/$TEMP_INPUT_FILE"
 # Run Bakta annotation
 log "$LOGS_DIR" "$LOG_NAME" "Running Bakta annotation for $analysis_assembly_file"
 
-apptainer exec \
+# Capture Bakta output for error reporting
+bakta_output=$(apptainer exec \
     --bind "$(dirname "$analysis_assembly_file")":/mnt/input \
     --bind "$BAKTA_OUTPUT_DIR":/mnt/output \
     --bind "$DATABASES_DIR/bakta_db/db":/mnt/bakta_db/db \
-    --bind "$ENTROPY_FILE":/dev/random \
-    --bind "$ENTROPY_FILE":/dev/urandom \
+    ${ENTROPY_ARGS[@]+"${ENTROPY_ARGS[@]}"} \
     "$genome_annotation_sif" \
     bash -c "set -e; \
              source /opt/conda/etc/profile.d/conda.sh && \
@@ -159,14 +163,26 @@ apptainer exec \
              cp /mnt/input/$(basename "$analysis_assembly_file") /mnt/input/$TEMP_INPUT_FILE && \
              export TMPDIR=/tmp && \
              $bakta_cmd && \
-             rm /mnt/input/$TEMP_INPUT_FILE" || {
-    log "$LOGS_DIR" "$LOG_NAME" "Error: Bakta annotation failed for $analysis_assembly_file. Skipping Bakta annotation."
+             rm /mnt/input/$TEMP_INPUT_FILE" 2>&1) || {
+    log "$LOGS_DIR" "$LOG_NAME" "Error: Bakta annotation failed for $analysis_assembly_file"
+    log "$LOGS_DIR" "$LOG_NAME" "Bakta output: $bakta_output"
     exit 0
 }
 
+# Validate required output files were created
+tsv_output=$(find "$BAKTA_OUTPUT_DIR" -name '*_annotation_bakta.tsv' -print -quit)
+if [[ ! -f "$tsv_output" ]]; then
+    log "$LOGS_DIR" "$LOG_NAME" "Error: Bakta did not produce expected output files"
+    log "$LOGS_DIR" "$LOG_NAME" "Bakta output: $bakta_output"
+    exit 0
+fi
+
+log "$LOGS_DIR" "$LOG_NAME" "Bakta annotation completed successfully"
+
 # Copy output files to genome annotation directory
 for ext in "${OUTPUT_EXTENSIONS[@]}"; do
-    if files=$(find "$BAKTA_OUTPUT_DIR" -type f -name "*$ext"); then
+    files=$(find "$BAKTA_OUTPUT_DIR" -type f -name "*$ext")
+    if [[ -n "$files" ]]; then
         for file in $files; do
             cp "$file" "$GENOME_ANNOTATION_DIR"
         done

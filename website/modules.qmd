@@ -1,0 +1,132 @@
+---
+title: "Modules"
+---
+
+StrainCascade v2.0.0 comprises 30 analysis modules (SC1–SC30), each operating within its own Apptainer container for full reproducibility and isolation.
+
+## Module Reference
+
+| Module | Tool | Description |
+|--------|------|-------------|
+| **SC1** | Canu | Long-read correction & trimming |
+| **SC2** | LJA | Multiplex de Bruijn graph assembly (HiFi-optimised) |
+| **SC3** | SPAdes | Multi-*k*-mer de Bruijn graph assembly |
+| **SC4** | Canu | Overlap-layout-consensus assembly with adaptive *k*-mer weighting |
+| **SC5** | Flye | Repeat graph assembly for long error-prone reads |
+| **SC6** | Unicycler | Hybrid (long+short) or long-read-only assembly (miniasm+Racon) |
+| **SC7** | QUAST | Assembly quality evaluation round 1 (pre-merge) |
+| **SC8** | MAC2 | Consensus assembly merging from multiple assemblers |
+| **SC9** | QUAST | Assembly quality evaluation round 2 (post-merge) |
+| **SC10** | Circlator | Contig circularisation |
+| **SC11** | QUAST | Assembly quality evaluation round 3 (post-circularisation) |
+| **SC12** | Arrow/Medaka + Polypolish | Assembly error correction (long-read + optional short-read polishing) |
+| **SC13** | minimap2 + BBMap | Read mapping & coverage statistics |
+| **SC14** | CheckM2 | Genome completeness & contamination QC |
+| **SC15** | GTDB-Tk | Taxonomic classification |
+| **SC16** | GTDB-Tk | *De novo* phylogenetic tree construction |
+| **SC17** | Bakta | Genome annotation (v2) |
+| **SC18** | Prokka | Prokaryotic genome annotation |
+| **SC19** | DeepFRI | Deep-learning protein function prediction (GO + EC) |
+| **SC20** | MicrobeAnnotator | Metabolic pathway annotation |
+| **SC21** | PlasmidFinder | Plasmid replicon identification |
+| **SC22** | AMRFinderPlus | Antimicrobial resistance gene detection |
+| **SC23** | ResFinder | Resistance gene identification |
+| **SC24** | dbCAN3 | Carbohydrate-active enzyme (CAZyme) identification |
+| **SC25** | IslandPath-DIMOB | Genomic island prediction |
+| **SC26** | VirSorter2 | Viral/phage sequence detection (HMM multi-classifier) |
+| **SC27** | geNomad | Viral & plasmid identification (marker-based classification) |
+| **SC28** | CRISPRCasFinder | CRISPR-Cas system detection |
+| **SC29** | ISEScan | Insertion sequence element detection |
+| **SC30** | — | Consolidated data integration & interactive HTML report |
+
+---
+
+## Module Groups
+
+### Assembly (SC1–SC8)
+
+Five distinct assembler algorithms maximise complementarity:
+
+- **Canu** — adaptive *k*-mer weighting with overlap-layout-consensus
+- **SPAdes** — multi-*k*-mer de Bruijn graph approach
+- **Flye** — repeat graph construction for long error-prone reads
+- **LJA** — multiplex de Bruijn graphs optimised for HiFi reads
+- **Unicycler** — hybrid mode (long+short) or long-read-only (miniasm+Racon)
+
+Draft assemblies are evaluated by QUAST (SC7), then merged into a consensus assembly by MAC2 (SC8).
+
+### Refinement (SC9–SC13)
+
+Post-merge, the best assembly undergoes:
+
+1. **Quality evaluation** (SC9) — QUAST assessment post-merge
+2. **Circularisation** (SC10) — Circlator resolves circular replicons
+3. **Quality evaluation** (SC11) — QUAST assessment post-circularisation
+4. **Polishing** (SC12) — Arrow (PacBio) or Medaka (ONT) for long-read polishing, plus optional Polypolish when short reads are provided
+5. **Coverage** (SC13) — minimap2 alignment + BBMap statistics
+
+### Quality Control & Taxonomy (SC14–SC16)
+
+- **CheckM2** (SC14) — completeness/contamination assessment using ML-based marker gene analysis
+- **GTDB-Tk** (SC15) — taxonomic classification against the Genome Taxonomy Database
+- **GTDB-Tk** (SC16) — *de novo* phylogenetic tree placement
+
+### Annotation (SC17–SC20)
+
+A multi-tool annotation consensus framework:
+
+- **Bakta** (SC17) — primary annotation (NCBI-compliant, database-driven)
+- **Prokka** (SC18) — complementary gene calls
+- **DeepFRI** (SC19) — deep-learning protein function prediction across GO categories (MF, BP, CC) and EC numbers
+- **MicrobeAnnotator** (SC20) — metabolic pathway annotation via KEGG/COG
+
+When Bakta and Prokka disagree, DeepFRI serves as an equal voting member in a three-way consensus. If DeepFRI agrees with one tool, that annotation is preferred; when all three disagree, structure-based predictions are considered alongside database-derived annotations.
+
+### Functional Screens (SC21–SC29)
+
+| Module | Target | Method |
+|--------|--------|--------|
+| SC21 | Plasmid replicons | PlasmidFinder database matching |
+| SC22 | AMR genes | AMRFinderPlus HMM + BLAST |
+| SC23 | Resistance genes | ResFinder database screening |
+| SC24 | CAZymes | dbCAN3 multi-tool consensus |
+| SC25 | Genomic islands | IslandPath-DIMOB dinucleotide bias |
+| SC26 | Phages/viruses | VirSorter2 HMM multi-classifier |
+| SC27 | Viruses & plasmids | geNomad marker-based classification |
+| SC28 | CRISPR-Cas | CRISPRCasFinder pattern matching |
+| SC29 | IS elements | ISEScan profile HMM scanning |
+
+### Data Integration (SC30)
+
+All module outputs are consolidated into a unified results directory with an interactive HTML report for visual exploration.
+
+---
+
+## Execution Modes
+
+| Mode | Modules | Use Case |
+|------|---------|----------|
+| `minimal` | SC3, SC7, SC14, SC15, SC17, SC30 | Quick assembly check |
+| `efficient` | SC1–SC3, SC7–SC12, SC14–SC15, SC17, SC21, SC30 | Balanced analysis |
+| `standard` | SC1–SC6, SC7–SC15, SC17–SC30 | Comprehensive analysis (default) |
+| `comprehensive` | All 30 modules | Full analysis |
+| `custom` | User-specified (e.g. `custom:SC1,SC2,SC3`) | Targeted analysis |
+
+### Bundles
+
+| Bundle | Focus | Modules |
+|--------|-------|---------|
+| `assembly` | Genome assembly & QC | SC1–SC14 |
+| `annotation` | Annotation modules | SC17–SC20 |
+| `functional` | Functional screens | SC15, SC22–SC25 |
+| `phage` | Phage detection | SC26–SC29 |
+
+---
+
+## Assembly-Input Mode
+
+When pre-assembled genomes are provided via `-a`, the following modules are automatically skipped:
+
+- SC1 (Canu trim), SC2–SC6 (assemblers), SC7–SC8 (evaluation 1 + merge), SC9 (evaluation 2), SC10 (circularisation), SC12 (polishing), SC13 (coverage)
+
+The pipeline starts from SC11 (evaluation 3) and SC14 (CheckM2) onwards.

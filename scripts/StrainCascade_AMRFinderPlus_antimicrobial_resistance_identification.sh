@@ -13,8 +13,8 @@ set -euo pipefail
 show_usage() {
     cat << EOF
 Usage: $0 <script_dir> <logs_dir> <log_name> <utils_file> <apptainer_images_dir> <output_dir> 
-          <sample_name> <threads> <genome_assembly_main_abs> <functional_analysis_main_abs>
-          <results_integration_abs> <taxonomic_classification_main_abs> <databases_dir> <version>
+          <sample_name> <threads> <genome_assembly_main_abs> <taxonomic_classification_main_abs>
+          <functional_analysis_main_abs> <results_integration_abs> <databases_dir> <version>
 EOF
     exit 1
 }

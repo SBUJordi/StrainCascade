@@ -60,15 +60,6 @@ log "$LOGS_DIR" "$LOG_NAME" "Running CRISPRCasFinder identification for $analysi
 readonly INPUT_DIR=$(dirname "$analysis_assembly_file")
 readonly INPUT_FILENAME=$(basename "$analysis_assembly_file")
 readonly TEMP_INPUT_FILE="temp_input_assembly_CRISPRCasFinder.fasta"
-readonly TEMP_OUTPUT_DIR="temp_crisprcasfinder_output"
-
-# Prepare CRISPRCasFinder command - removed -outdir parameter
-readonly CRISPRCAS_CMD="perl /opt/CRISPRCasFinder/CRISPRCasFinder.pl \
-    -in /mnt/input/$TEMP_INPUT_FILE \
-    -so /opt/CRISPRCasFinder/sel392v2.so \
-    -cas \
-    -keep \
-    -cpuM $THREADS"
 
 # Create temporary directory to catch intermediate files
 readonly ORIGINAL_DIR=$(pwd)
@@ -83,17 +74,21 @@ apptainer exec \
     --bind "$TEMP_DIR":/workdir \
     "$straincascade_crisprcas_phage_is_elements" \
     bash -c "cd /workdir && \
-             cp /mnt/input/$INPUT_FILENAME /mnt/input/$TEMP_INPUT_FILE && \
+             cp /mnt/input/$INPUT_FILENAME /workdir/$TEMP_INPUT_FILE && \
              source /opt/conda/etc/profile.d/conda.sh && \
              conda activate crisprcasfinder && \
-             $CRISPRCAS_CMD && \
-             # Move all output files from working directory to output directory
+             perl /opt/CRISPRCasFinder/CRISPRCasFinder.pl \
+                 -in /workdir/$TEMP_INPUT_FILE \
+                 -so /opt/CRISPRCasFinder/sel392v2.so \
+                 -cas \
+                 -keep \
+                 -cpuM $THREADS && \
              mv Result_* /mnt/output/ && \
-             rm /mnt/input/$TEMP_INPUT_FILE" || {
+             rm /workdir/$TEMP_INPUT_FILE" || {
     log "$LOGS_DIR" "$LOG_NAME" "Error: CRISPRCasFinder identification failed"
     cd "$ORIGINAL_DIR"
     rm -rf "$TEMP_DIR"
-    exit 1
+    exit 0
 }
 
 # Copy only the most relevant output files

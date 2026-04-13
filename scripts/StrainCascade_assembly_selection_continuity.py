@@ -94,13 +94,30 @@ else:
         # Correction factor for MAD
         mad_factor = 1.96 * 1.4826
 
-        # Remove assemblies that are significantly larger AND have significantly more contigs
-        df = df[~((df['Total length (>= 0 bp)'] > median_assembly_length + mad_factor * mad_length) & 
-                  (df[contig_column] > median_contig_number + mad_factor * mad_contigs))]
+        # Skip MAD-based filtering when assemblies are tightly clustered.
+        # Use 1% of median genome length as minimum MAD threshold for size,
+        # and 1 contig as minimum threshold for contig count (discrete values).
+        # When only one dimension has low MAD, the AND condition in the filter
+        # naturally prevents over-filtering: the weak dimension's threshold
+        # approximates "above median" while the strong dimension provides
+        # genuine outlier detection.
+        min_mad_length_threshold = 0.01 * median_assembly_length
+        min_mad_contigs_threshold = 1.0
+        length_filter_valid = mad_length > 0 and mad_length >= min_mad_length_threshold
+        contigs_filter_valid = mad_contigs > 0 and mad_contigs >= min_mad_contigs_threshold
 
-        # Remove assemblies that are significantly smaller and below 580,000 bp
-        df = df[~((df['Total length (>= 0 bp)'] < median_assembly_length - mad_factor * mad_length) & 
-                  (df['Total length (>= 0 bp)'] < 580000))] # Science. 1995 Oct 20;270(5235):397-403. doi: 10.1126/science.270.5235.397
+        if length_filter_valid or contigs_filter_valid:
+            # Remove assemblies that are significantly larger AND have significantly more contigs
+            df = df[~((df['Total length (>= 0 bp)'] > median_assembly_length + mad_factor * mad_length) & 
+                      (df[contig_column] > median_contig_number + mad_factor * mad_contigs))]
+
+            # Remove assemblies that are significantly smaller and below 580,000 bp
+            df = df[~((df['Total length (>= 0 bp)'] < median_assembly_length - mad_factor * mad_length) & 
+                      (df['Total length (>= 0 bp)'] < 580000))] # Science. 1995 Oct 20;270(5235):397-403. doi: 10.1126/science.270.5235.397
+        else:
+            logger.info(f"MAD for length ({mad_length:.0f} bp) and contigs ({mad_contigs:.1f}) are both below "
+                         f"minimum thresholds ({min_mad_length_threshold:.0f} bp, {min_mad_contigs_threshold:.0f}). "
+                         "Assemblies are tightly clustered. Skipping MAD-based filtering.")
 
     # Initialize variables
     equivalent_assemblies = []
@@ -140,19 +157,21 @@ else:
         if len(df) > 1:
             df.to_csv(os.path.join(output_dir, 'equivalent_assemblies.tsv'), sep='\t', index=False)
 
-    # Check for assemblies with the '_circularised' pattern first
-    circularised_assemblies = df[df['Assembly'].str.contains('_circularised')]
-    if not circularised_assemblies.empty:
-        chosen_assembly = circularised_assemblies.iloc[0].to_dict()
-    # Then check for assemblies with the 'best_ev2' pattern
-    elif not df[df['Assembly'].str.contains('best_ev2')].empty:
-        chosen_assembly = df[df['Assembly'].str.contains('best_ev2')].iloc[0].to_dict()
-    # Then check for assemblies with the 'best_ev1' pattern
-    elif not df[df['Assembly'].str.contains('best_ev1')].empty:
-        chosen_assembly = df[df['Assembly'].str.contains('best_ev1')].iloc[0].to_dict()
-    # If none of the patterns are found, choose the first assembly in the list
-    else:
-        chosen_assembly = df.iloc[0].to_dict()
+    # If there is still no single winner after additional criteria, apply naming preferences
+    if len(df) > 1:
+        # Check for assemblies with the '_circularised' pattern first
+        circularised_assemblies = df[df['Assembly'].str.contains('_circularised')]
+        if not circularised_assemblies.empty:
+            chosen_assembly = circularised_assemblies.iloc[0].to_dict()
+        # Then check for assemblies with the 'best_ev2' pattern
+        elif not df[df['Assembly'].str.contains('best_ev2')].empty:
+            chosen_assembly = df[df['Assembly'].str.contains('best_ev2')].iloc[0].to_dict()
+        # Then check for assemblies with the 'best_ev1' pattern
+        elif not df[df['Assembly'].str.contains('best_ev1')].empty:
+            chosen_assembly = df[df['Assembly'].str.contains('best_ev1')].iloc[0].to_dict()
+        # If none of the patterns are found, choose the first assembly in the list
+        else:
+            chosen_assembly = df.iloc[0].to_dict()
 
 # Ensure that a chosen assembly is always returned
 if chosen_assembly is None:

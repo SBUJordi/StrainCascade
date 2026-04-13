@@ -7,8 +7,8 @@
 # StrainCascade_installation_utils.sh
 # Description: Utility functions for StrainCascade installation
 
-# Define required directories
-required_dirs=("scripts" "databases" "apptainer_images")
+# Define required directories (only scripts must pre-exist; others are created during installation)
+required_dirs=("scripts")
 
 # Define minimum disk space in GB (last measurement: 534G)
 min_disk_space=580
@@ -27,17 +27,30 @@ check_main_directory() {
             exit 1
         fi
     done
+    # Create optional directories if they don't exist yet (fresh installation)
+    mkdir -p "../databases" "../apptainer_images"
 }
 
-# Function to check disk space
+# Function to check disk space (POSIX-compatible, works across Linux distributions)
 check_disk_space() {
-    available_space=$(df -BG --output=avail . | tail -1 | sed 's/G//')
-    if [ "$available_space" -lt "$min_disk_space" ]; then
+    local available_kb
+    available_kb=$(df -P . 2>/dev/null | awk 'NR==2 {print $4}')
+    if [[ -z "$available_kb" ]] || ! [[ "$available_kb" =~ ^[0-9]+$ ]]; then
+        echo "Warning: Could not determine available disk space. Continuing installation."
+        return 0
+    fi
+    local available_gb=$((available_kb / 1048576))
+    if [ "$available_gb" -lt "$min_disk_space" ]; then
         echo "Warning: Insufficient disk space for full StrainCascade installation."
-        echo "Available disk space: ${available_space}GB"
+        echo "Available disk space: ${available_gb}GB"
         echo "Recommended minimal disk space: ${min_disk_space}GB"
+        read -p "Do you want to continue anyway? (y/n) " choice
+        case "$choice" in
+            y|Y) echo "Continuing with installation despite low disk space." ;;
+            *) echo "Installation aborted due to insufficient disk space."; exit 0 ;;
+        esac
     else
-        echo "Sufficient disk space available: ${available_space}GB"
+        echo "Sufficient disk space available: ${available_gb}GB"
         echo "Recommended minimal disk space: ${min_disk_space}GB"
     fi
 }
@@ -53,6 +66,26 @@ check_apptainer_installation() {
     fi
 }
 
+# Function to check if required command-line tools are available
+check_required_tools() {
+    local missing_tools=""
+    local required_tools=("wget" "curl" "git" "tar")
+
+    for tool in "${required_tools[@]}"; do
+        if ! command -v "$tool" &> /dev/null; then
+            missing_tools+="  - $tool\n"
+        fi
+    done
+
+    if [[ -n "$missing_tools" ]]; then
+        echo "Error: The following required tools are not installed:"
+        echo -e "$missing_tools"
+        echo "Please install them and try again."
+        exit 1
+    fi
+    echo "All required tools are available."
+}
+
 # Function to update StrainCascade scripts
 update_scripts() {
     local current_dir=$(pwd)
@@ -65,7 +98,7 @@ update_scripts() {
     mkdir -p "$temp_dir"
     cd "$temp_dir"
 
-    # Clone the latest version of the repository (pre-release with read-only access token)
+    # Clone the latest version of the public repository
     if ! git clone https://github.com/SBUJordi/StrainCascade.git; then
         echo "Failed to clone the repository. Update aborted."
         cd "$current_dir"
@@ -102,27 +135,29 @@ update_scripts() {
 # Function to pull Apptainer images
 pull_apptainer_images() {
     mkdir -p "$APPTAINER_IMAGES_DIR"
-    # Add the list of docker images to be pulled
+    # Add the list of docker images to be pulled (always use :latest tag)
     docker_images=(
-        "sbujordi/straincascade_genome_assembly:v3"
-        "sbujordi/straincascade_lja_genome_assembly:v1"
-        "sbujordi/straincascade_assembly_qc_refinement:v2"
-        "sbujordi/straincascade_genome_annotation:v2"
-        "sbujordi/straincascade_taxonomic_functional_analysis:v2"
-        "sbujordi/straincascade_crisprcas_phage_is_elements:v1"
-        "sbujordi/python_3.12.4:v1"
-        "sbujordi/r_4.4.1:v2"
-        "sbujordi/straincascade_document_processing:v1"
+        "sbujordi/straincascade_genome_assembly:latest"
+        "sbujordi/straincascade_lja_genome_assembly:latest"
+        "sbujordi/straincascade_assembly_qc_refinement:latest"
+        "sbujordi/straincascade_genome_annotation:latest"
+        "sbujordi/straincascade_taxonomic_functional_analysis:latest"
+        "sbujordi/straincascade_crisprcas_phage_is_elements:latest"
+        "sbujordi/python_3.12.4:latest"
+        "sbujordi/r_4.4.1:latest"
+        "sbujordi/straincascade_document_processing:latest"
     )
 
     for image in "${docker_images[@]}"; do
-        local image_file="$APPTAINER_IMAGES_DIR/$(basename $image).sif"
+        # Convert docker image name to SIF filename (replace : with _)
+        local image_basename=$(basename "$image" | tr ':' '_')
+        local image_file="$APPTAINER_IMAGES_DIR/${image_basename}.sif"
+        
         if [ -f "$image_file" ]; then
-            read -p "Image file $image_file already exists. Do you want to overwrite it? (y/n) " choice
+            read -p "Image file $image_file already exists. Overwrite? [Y/n] " choice
             case "$choice" in
-                y|Y ) echo "Overwriting $image_file..."; force_flag="--force";;
                 n|N ) echo "Skipping $image_file..."; continue;;
-                * ) echo "Invalid choice. Skipping $image_file..."; continue;;
+                * ) echo "Overwriting $image_file..."; force_flag="--force";;
             esac
         else
             force_flag=""
@@ -213,6 +248,30 @@ check_apptainer_image_exists() {
     return 0
 }
 
+# Function to check if a database appears to be already installed
+is_database_installed() {
+    local db_name=$1
+    local db_dir=$2
+
+    case "$db_name" in
+        "bakta_db")
+            [[ -f "$db_dir/$db_name/db/version.json" ]]
+            ;;
+        "prokka_db")
+            # Prokka DB is embedded in the container; listing always runs
+            return 1
+            ;;
+        "resfinder_db")
+            # resfinder also installs pointfinder_db and disinfinder_db
+            [[ -d "$db_dir/resfinder_db" ]] && [[ "$(ls -A "$db_dir/resfinder_db" 2>/dev/null)" ]] && \
+            [[ -d "$db_dir/pointfinder_db" ]] && [[ -d "$db_dir/disinfinder_db" ]]
+            ;;
+        *)
+            [[ -d "$db_dir/$db_name" ]] && [[ "$(ls -A "$db_dir/$db_name" 2>/dev/null)" ]]
+            ;;
+    esac
+}
+
 # Function to install individual databases
 install_individual_database() {
     local db_name=$1
@@ -272,7 +331,7 @@ install_individual_database() {
                 return 1
             fi
 
-            echo "Installing Bakta database..."
+            echo "Installing Bakta database (with xz compression support)..."
             
             mkdir -p "$db_dir/$db_name"
 
@@ -297,41 +356,75 @@ install_individual_database() {
                 done
             }
 
-            # Download and install Bakta database using the container
+            # Download and install Bakta database v6.0 using the container
+            # This automatically handles xz decompression and creates the amrfinderplus-db directory structure
             if ! apptainer exec \
                 --bind "$db_dir/$db_name":/mnt/db \
                 "${straincascade_genome_annotation}" \
                 bash -c "source /opt/conda/etc/profile.d/conda.sh && \
                         conda activate bakta_env && \
-                        echo \"Downloading full Bakta database...\" && \
+                        echo \"Downloading Bakta database (full type, xz compressed)...\" && \
                         bakta_db download --output /mnt/db --type full"; then
-                echo "Error: Failed to download and setup Bakta databases" >&2
+                echo "Error: Failed to download and setup Bakta database" >&2
                 return 1
             fi
 
             if ! check_apptainer_image_exists "$straincascade_taxonomic_functional_analysis"; then
-                echo "Error: Required Apptainer image (straincascade_taxonomic_functional_analysis) for installing/updating AMRPlusFinder database for Bakta not found." >&2
+                echo "Error: Required Apptainer image (straincascade_taxonomic_functional_analysis) for populating AMRFinderPlus database not found." >&2
                 return 1
             fi
 
-            # Create the directory for AMRPlusFinder database if not present yet
-            mkdir -p "$db_dir/$db_name/db/amrfinderplus-db"
+            # Verify that amrfinderplus-db directory was created by bakta_db
+            if [ ! -d "$db_dir/$db_name/db/amrfinderplus-db" ]; then
+                echo "Warning: amrfinderplus-db directory not found. Creating it..." >&2
+                mkdir -p "$db_dir/$db_name/db/amrfinderplus-db"
+            fi
 
-            # Install AMRPlusFinder database using the container with retry
+            # Populate AMRFinderPlus database using the SAME container that runs Bakta
+            # This ensures the database version matches the AMRFinderPlus binary in bakta_env
+            # Note: bakta_db creates the directory structure, but amrfinder_update populates it
+            echo "Populating AMRFinderPlus database (using Bakta container for version compatibility)..."
             if ! try_command "apptainer exec \
                         --bind \"$db_dir/$db_name/db/amrfinderplus-db\":/data \
-                        \"$straincascade_taxonomic_functional_analysis\" \
+                        \"$straincascade_genome_annotation\" \
                         /usr/bin/bash -c \"
                             source /opt/conda/etc/profile.d/conda.sh && \
-                            conda activate amrfinderplus_env && \
+                            conda activate bakta_env && \
                             amrfinder_update --force_update --database /data\""; then
-                echo "Error: Failed to install AMRPlusFinder database after 2 attempts" >&2
+                echo "Error: Failed to populate AMRFinderPlus database after 2 attempts" >&2
                 return 1
             fi
 
-            # Verify installation
+            # Verify complete installation
             if [ ! -d "$db_dir/$db_name/db/amrfinderplus-db" ] || [ ! -f "$db_dir/$db_name/db/version.json" ]; then
                 echo "Warning: Bakta database installation verification failed - check manually" >&2
+            fi
+
+            # Rebuild Diamond databases to ensure version compatibility
+            # This prevents "Diamond failed! diamond-error-code=1" errors caused by version mismatches
+            # Only attempt rebuild if source FASTA files exist (db v6.0 ships pre-built .dmnd files)
+            if [ -f "$db_dir/$db_name/db/psc.faa" ] && [ -f "$db_dir/$db_name/db/pscc.faa" ]; then
+                echo "Rebuilding Diamond databases for version compatibility..."
+                if ! apptainer exec \
+                    --bind "$db_dir/$db_name/db":/mnt/db \
+                    "${straincascade_genome_annotation}" \
+                    bash -c "source /opt/conda/etc/profile.d/conda.sh && \
+                            conda activate bakta_env && \
+                            cd /mnt/db && \
+                            echo 'Rebuilding psc.dmnd...' && \
+                            diamond makedb --in psc.faa --db psc && \
+                            echo 'Rebuilding pscc.dmnd...' && \
+                            diamond makedb --in pscc.faa --db pscc && \
+                            echo 'Diamond databases rebuilt successfully'"; then
+                    echo "Warning: Failed to rebuild Diamond databases. Bakta may fail with Diamond errors." >&2
+                    echo "You can manually rebuild by running:" >&2
+                    echo "  apptainer exec --bind $db_dir/$db_name/db:/mnt/db <genome_annotation.sif> bash -c 'source /opt/conda/etc/profile.d/conda.sh && conda activate bakta_env && cd /mnt/db && diamond makedb --in psc.faa --db psc && diamond makedb --in pscc.faa --db pscc'" >&2
+                fi
+            elif [ -f "$db_dir/$db_name/db/psc.dmnd" ] && [ -f "$db_dir/$db_name/db/pscc.dmnd" ]; then
+                echo "Diamond databases already present (pre-built by bakta_db). Skipping rebuild."
+            else
+                echo "Warning: Neither FASTA source files nor pre-built Diamond databases found in $db_dir/$db_name/db/" >&2
+                echo "Bakta may fail with Diamond errors. Check database integrity manually." >&2
             fi
 
             echo "Bakta database installation completed successfully"
@@ -356,17 +449,19 @@ install_individual_database() {
             if ! check_apptainer_image_exists "$straincascade_genome_annotation"; then
                 return 1
             fi
-            local threads=$(( ($(getconf _NPROCESSORS_ONLN) * 4) / 5 ))  # Multiply by 4 and divide by 5 to approximate division by 1.25
-            threads=$(( threads < 1 ? 1 : threads ))
+            # Limit threads to avoid FTP connection limits (NCBI servers typically limit to 3-5 connections)
+            local max_threads=4
+            local available_threads=$(( ($(getconf _NPROCESSORS_ONLN) * 4) / 5 ))
+            available_threads=$(( available_threads < 1 ? 1 : available_threads ))
+            local threads=$(( available_threads < max_threads ? available_threads : max_threads ))
 
             if apptainer exec --bind "$db_dir":/data "$straincascade_genome_annotation" \
-               microbeannotator_db_builder -d /data/microbeannotator_db -m blast -t $threads; then
+               microbeannotator_db_builder -d /data/microbeannotator_db -m blast -t $threads --no_aspera; then
                 echo "$db_name database installed successfully in $db_dir/microbeannotator_db"
                 return 0
             else
                 echo "Error occurred during $db_name database installation." >&2
-                echo "If this error is related to Aspera (Connect) you can ignore it; StrainCascade does not use Aspera Connect"
-                return 0
+                return 1
             fi
         ;;
         "plasmidfinder_db")
@@ -423,16 +518,23 @@ install_individual_database() {
             if ! check_apptainer_image_exists "$straincascade_taxonomic_functional_analysis"; then
                 return 1
             fi
-            max_cpus=$(($(nproc) - 1))
             mkdir -p "$db_dir/$db_name"
+            # dbCAN v5: use built-in database download from AWS S3
+            # The original bcb.unl.edu server is permanently offline (cyberattack);
+            # v5 downloads pre-built databases from AWS S3 via run_dbcan database
             if apptainer exec \
                         --bind "$db_dir/$db_name":/mnt/ \
                         "$straincascade_taxonomic_functional_analysis" \
-                        /usr/bin/bash -c "
-                            source /opt/conda/etc/profile.d/conda.sh && \
-                            conda activate dbcan_env && \
-                            cd /mnt && \
-                            dbcan_build --cpus $max_cpus --db-dir db --clean"; then
+                        /usr/bin/bash -c '
+                            set -euo pipefail
+                            source /opt/conda/etc/profile.d/conda.sh
+                            conda activate dbcan_env
+                            cd /mnt
+                            test -d db && rm -rf db
+                            mkdir db
+                            echo "Downloading dbCAN v5 databases from AWS S3..."
+                            run_dbcan database --db_dir /mnt/db --aws_s3 --cgc
+                            echo "dbCAN v5 database download complete."'; then
                 echo "$db_name database installed successfully in $db_dir/$db_name"
                 return 0
             else
@@ -472,6 +574,63 @@ install_individual_database() {
                 return 1
             fi
         ;;
+        "genomad_db")
+            if ! check_apptainer_image_exists "$straincascade_crisprcas_phage_is_elements"; then
+                echo "Missing Apptainer image" >&2
+                return 1
+            fi
+
+            echo "Installing geNomad database..."
+            mkdir -p "$db_dir/$db_name"
+
+            # Download geNomad database using the container
+            if apptainer exec \
+                --bind "$db_dir":/mnt \
+                "$straincascade_crisprcas_phage_is_elements" \
+                bash -c "source /opt/conda/etc/profile.d/conda.sh && \
+                         conda activate genomad_env && \
+                         cd /mnt && \
+                         genomad download-database ."; then
+                echo "geNomad database installed successfully in $db_dir/genomad_db"
+                return 0
+            else
+                echo "Error occurred during $db_name database installation." >&2
+                return 1
+            fi
+        ;;
+        "deepfri_db")
+            echo "Installing DeepFri database (CPU models)..."
+            mkdir -p "$db_dir/$db_name"
+            
+            db_url="https://users.flatironinstitute.org/~renfrew/DeepFRI_data/newest_trained_models.tar.gz"
+            
+            if ! command -v wget &> /dev/null; then
+                echo "wget is required but not installed. Aborting." >&2
+                return 1
+            fi
+            
+            # Download the trained models
+            if wget --timeout=30 --tries=3 -P "$db_dir/$db_name" "$db_url"; then
+                archive_file="$db_dir/$db_name/newest_trained_models.tar.gz"
+                if [ -f "$archive_file" ]; then
+                    echo "Extracting DeepFri models..."
+                    if tar -xzf "$archive_file" -C "$db_dir/$db_name"; then
+                        rm "$archive_file"
+                        echo "$db_name database installed successfully in $db_dir/$db_name"
+                        return 0
+                    else
+                        echo "Error: Failed to extract DeepFri models" >&2
+                        return 1
+                    fi
+                else
+                    echo "Error: Downloaded archive file not found" >&2
+                    return 1
+                fi
+            else
+                echo "Error occurred during $db_name database download." >&2
+                return 1
+            fi
+        ;;
         *)
             echo "Unknown database: $db_name" >&2
             return 1
@@ -482,48 +641,108 @@ install_individual_database() {
 # Function to install databases with user interaction
 install_databases() {
     local db_location=$1
-    
+
     # List of available databases
-    databases=("checkm2_db" "gtdbtk_db" "bakta_db" "prokka_db" "microbeannotator_db" "plasmidfinder_db" "amrfinderplus_db" "resfinder_db" "dbcan3_db" "virsorter2_db")
-    
+    databases=("checkm2_db" "gtdbtk_db" "bakta_db" "prokka_db" "microbeannotator_db" "plasmidfinder_db" "amrfinderplus_db" "resfinder_db" "dbcan3_db" "virsorter2_db" "genomad_db" "deepfri_db")
+
+    local failed_dbs=""
+    local succeeded_dbs=""
+    local skipped_dbs=""
+    local fail_count=0
+    local success_count=0
+    local skip_count=0
+
     for db in "${databases[@]}"; do
-        read -p "Do you want to install $db? (y/n) " choice
+        local prompt_msg="Do you want to install $db? (y/n) "
+        if is_database_installed "$db" "$db_location"; then
+            prompt_msg="$db appears to be already installed. Reinstall? (y/n) "
+        fi
+        read -p "$prompt_msg" choice
         case "$choice" in
-            y|Y ) install_individual_database "$db" "$db_location";;
-            n|N ) echo "Skipping $db installation.";;
-            * ) echo "Invalid choice. Skipping $db installation.";;
+            y|Y )
+                if install_individual_database "$db" "$db_location"; then
+                    succeeded_dbs+="$db "
+                    success_count=$((success_count + 1))
+                else
+                    failed_dbs+="$db "
+                    fail_count=$((fail_count + 1))
+                fi
+                ;;
+            * )
+                echo "Skipping $db installation."
+                skipped_dbs+="$db "
+                skip_count=$((skip_count + 1))
+                ;;
         esac
     done
+
+    echo ""
+    echo "=========================================="
+    echo "  Database Installation Summary"
+    echo "=========================================="
+    echo "  Succeeded: $success_count | Failed: $fail_count | Skipped: $skip_count"
+    if [[ -n "$succeeded_dbs" ]]; then echo "  Succeeded: $succeeded_dbs"; fi
+    if [[ -n "$failed_dbs" ]]; then echo "  FAILED:    $failed_dbs"; fi
+    if [[ -n "$skipped_dbs" ]]; then echo "  Skipped:   $skipped_dbs"; fi
+    echo "=========================================="
 }
 
 # Function to install all databases without user interaction
 install_all_databases() {
     local db_location=$1
-    
-    databases=("checkm2_db" "gtdbtk_db" "bakta_db" "prokka_db" "microbeannotator_db" "plasmidfinder_db" "amrfinderplus_db" "resfinder_db" "dbcan3_db" "virsorter2_db")
-    
+
+    databases=("checkm2_db" "gtdbtk_db" "bakta_db" "prokka_db" "microbeannotator_db" "plasmidfinder_db" "amrfinderplus_db" "resfinder_db" "dbcan3_db" "virsorter2_db" "genomad_db" "deepfri_db")
+
+    local failed_dbs=""
+    local succeeded_dbs=""
+    local fail_count=0
+    local success_count=0
+    local total=${#databases[@]}
+    local current=0
+
     for db in "${databases[@]}"; do
-        echo "Installing $db..."
-        install_individual_database "$db" "$db_location"
+        current=$((current + 1))
+        echo ""
+        echo "[$current/$total] Installing $db..."
+        if install_individual_database "$db" "$db_location"; then
+            succeeded_dbs+="$db "
+            success_count=$((success_count + 1))
+        else
+            failed_dbs+="$db "
+            fail_count=$((fail_count + 1))
+        fi
     done
+
+    echo ""
+    echo "=========================================="
+    echo "  Database Installation Summary"
+    echo "=========================================="
+    echo "  Total: $total | Succeeded: $success_count | Failed: $fail_count"
+    if [[ -n "$failed_dbs" ]]; then echo "  FAILED: $failed_dbs"; fi
+    echo "=========================================="
 }
 
 # Function to get necessary Apptainer images for database installation
+# Looks for images with _latest.sif suffix (from :latest docker tags)
 get_apptainer_images() {
-    local APPTAINER_IMAGES_DIR="$1"
+    local apptainer_img_dir="$1"
     local images=("straincascade_assembly_qc_refinement" "straincascade_genome_annotation" "straincascade_taxonomic_functional_analysis" "straincascade_crisprcas_phage_is_elements")
 
     for image in "${images[@]}"; do
-        local image_file=("$APPTAINER_IMAGES_DIR/${image}"*.sif)
-        if [ "${#image_file[@]}" -eq 0 ]; then
-            echo "No matching .sif file for $image database installation found in $APPTAINER_IMAGES_DIR. Continuing with the next installation step."
-            return 1
-        elif [ "${#image_file[@]}" -gt 1 ]; then
-            echo "Warning: Multiple matching .sif files for $image database installation found. Using the first match: ${image_file[0]}"
-            declare -g "${image}=${image_file[0]}"
-        else
-            declare -g "${image}=${image_file[0]}"
+        # First try to find _latest.sif, then fall back to any matching pattern
+        local image_file="$apptainer_img_dir/${image}_latest.sif"
+        if [ ! -f "$image_file" ]; then
+            # Fall back to glob pattern for backwards compatibility
+            local matching_files=("$apptainer_img_dir/${image}"*.sif)
+            if [ ${#matching_files[@]} -eq 0 ] || [ ! -f "${matching_files[0]}" ]; then
+                echo "No matching .sif file for $image database installation found in $apptainer_img_dir. Continuing with the next installation step."
+                return 1
+            elif [ ${#matching_files[@]} -gt 1 ]; then
+                echo "Warning: Multiple matching .sif files for $image found. Using: ${matching_files[0]}"
+            fi
+            image_file="${matching_files[0]}"
         fi
+        declare -g "${image}=${image_file}"
     done
 
     return 0
@@ -534,12 +753,12 @@ check_existing_installations() {
     local existing_installations=false
 
     # Check for existing Apptainer images
-    if [ "$(ls -A "$APPTAINER_IMAGES_DIR")" ]; then
+    if [ -d "$APPTAINER_IMAGES_DIR" ] && [ "$(ls -A "$APPTAINER_IMAGES_DIR" 2>/dev/null)" ]; then
         existing_installations=true
     fi
 
     # Check for existing databases
-    if [ -d "$DEFAULT_DB_LOCATION" ] && [ "$(ls -A "$DEFAULT_DB_LOCATION")" ]; then
+    if [ -d "$DEFAULT_DB_LOCATION" ] && [ "$(ls -A "$DEFAULT_DB_LOCATION" 2>/dev/null)" ]; then
         existing_installations=true
     fi
 

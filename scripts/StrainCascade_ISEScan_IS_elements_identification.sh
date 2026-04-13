@@ -61,19 +61,23 @@ analysis_assembly_file=$(find_analysis_assembly_file "$GENOME_ASSEMBLY_DIR")
 # Log analysis start
 log "$LOGS_DIR" "$LOG_NAME" "Starting ISEScan analysis for $analysis_assembly_file"
 
+# Note: Assembly should already be normalized (contig_1, contig_2, etc.) from polishing step
+# No need to strip polishing suffixes since normalization already happened
+readonly ASSEMBLY_BASENAME="$(basename "$analysis_assembly_file")"
+
 # Build ISEScan command
 isescan_cmd="isescan.py \
-    --seqfile /mnt/output/temp/$(basename "$analysis_assembly_file") \
+    --seqfile /mnt/output/temp/${ASSEMBLY_BASENAME} \
     --output /mnt/output \
     --nthread $THREADS"
 
 # Run ISEScan identification
 apptainer exec \
-    --bind "$(dirname "$analysis_assembly_file")":/mnt/input \
     --bind "$ISESCAN_OUTPUT_DIR":/mnt/output \
+    --bind "$(dirname "$analysis_assembly_file")":/mnt/input \
     "$straincascade_crisprcas_phage_is_elements_sif" \
     bash -c "mkdir -p /mnt/output/temp && \
-             cp /mnt/input/$(basename "$analysis_assembly_file") /mnt/output/temp/$(basename "$analysis_assembly_file") && \
+             cp /mnt/input/${ASSEMBLY_BASENAME} /mnt/output/temp/${ASSEMBLY_BASENAME} && \
              source /opt/conda/etc/profile.d/conda.sh && \
              conda activate isescan_env && \
              $isescan_cmd" || {
@@ -84,11 +88,12 @@ apptainer exec \
 # Copy output files to functional analysis directory
 readonly OUTPUT_EXTENSIONS=(.gff .tsv .is.fna .orf.fna .orf.faa)
 
-base_filename="$(basename "$analysis_assembly_file")"
-base_filename="${base_filename%.*}"
+# Use the assembly basename for finding output files
+assembly_name_noext="${ASSEMBLY_BASENAME%.*}"  # removes .fasta
 
 for ext in "${OUTPUT_EXTENSIONS[@]}"; do
-    if files=$(find "$ISESCAN_OUTPUT_DIR/temp" -type f -name "${base_filename}*${ext}"); then
+    files=$(find "$ISESCAN_OUTPUT_DIR/temp" -type f -name "${assembly_name_noext}*${ext}")
+    if [[ -n "$files" ]]; then
         for file in $files; do
             cp "$file" "$FUNCTIONAL_ANALYSIS_DIR/ISEScan_${SAMPLE_NAME}_${ext}"
         done
@@ -96,6 +101,9 @@ for ext in "${OUTPUT_EXTENSIONS[@]}"; do
         echo "Warning: No *${ext} files found in $ISESCAN_OUTPUT_DIR/temp"
     fi
 done
+
+# Clean up temp directory
+rm -rf "$ISESCAN_OUTPUT_DIR/temp"
 
 # Process results with R
 readonly R_SCRIPT_DIR="$SCRIPT_DIR/R_scripts"

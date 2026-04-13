@@ -1,0 +1,133 @@
+---
+title: "Usage"
+---
+
+## Input Types
+
+StrainCascade accepts two mutually exclusive input types:
+
+| Flag | Input Type | Accepted Formats |
+|------|-----------|-----------------|
+| `-i` | Sequencing reads | `.fasta`, `.fa`, `.fna`, `.fastq`, `.fastq.gz`, `.bam` |
+| `-a` | Pre-assembled genomes | `.fasta`, `.fa`, `.fna` |
+
+Both flags accept a single file or a directory containing multiple files. When a directory is provided, all matching files are processed sequentially.
+
+## Sequencing Types
+
+| Parameter | Platform | Description |
+|-----------|----------|-------------|
+| `pacbio-hifi` | PacBio | HiFi/CCS reads (default) |
+| `pacbio-corr` | PacBio | Corrected subreads |
+| `pacbio-raw` | PacBio | Raw subreads |
+| `nano-hq` | ONT | High-quality (Q20+, R10.4+) |
+| `nano-corr` | ONT | Corrected reads |
+| `nano-raw` | ONT | Raw reads (older chemistry) |
+
+```bash
+straincascade -i reads.fastq.gz -s nano-hq -t 32
+```
+
+## Hybrid Assembly
+
+Providing paired Illumina short reads activates two features:
+
+1. **Unicycler Hybrid Assembly (SC6)** — combines long and short reads for improved assembly
+2. **Short-Read Polishing (SC12)** — BWA-MEM alignment + Polypolish consensus correction
+
+```bash
+straincascade -i longreads.fastq.gz \
+    -sr1 R1.fastq.gz -sr2 R2.fastq.gz \
+    -o output/ -s pacbio-hifi -t 32
+```
+
+When only long reads are provided, Unicycler falls back to long-read-only mode (miniasm+Racon).
+
+## External Assemblies
+
+Provide pre-existing assemblies from external tools for inclusion in the *de novo* phylogenetic tree (SC16):
+
+```bash
+straincascade -i reads.fastq.gz -ea /path/to/external_assemblies/ -o output/
+```
+
+## Assembly Selection Algorithm
+
+Two algorithms are available for selecting the best assembly from the multi-assembler suite:
+
+| Algorithm | Method |
+|-----------|--------|
+| `contig` (default) | MAD-based outlier filtering on genome size, then minimum contig count |
+| `continuity` | Bivariate MAD filtering on both genome size and contig count |
+
+```bash
+straincascade -i reads.fastq.gz -sa continuity
+```
+
+## Locus Tag
+
+By default, StrainCascade generates an automatic INSDC-compliant locus tag from the GTDB-Tk taxonomic classification. You can override this:
+
+```bash
+straincascade -i reads.fastq.gz -l MYORG
+```
+
+::: {.callout-note}
+INSDC locus tag prefixes must contain 3–12 alphanumeric uppercase characters and start with a letter.
+:::
+
+## Reproducibility Modes
+
+| Mode | Threads | Entropy | Use Case |
+|------|---------|---------|----------|
+| `--heuristic` (default) | User-specified | System | Fast, standard analysis |
+| `--deterministic` | Forced to 1 | Fixed file | Bit-identical reproducibility |
+
+```bash
+# Deterministic mode
+straincascade -i reads.fastq.gz --deterministic
+
+# Heuristic mode (default)
+straincascade -i reads.fastq.gz --heuristic -t 32
+```
+
+## Result Types
+
+| Type | Description |
+|------|-------------|
+| `main` (default) | Standard output files |
+| `all` | All intermediate and final files |
+| `R` | R-friendly output format |
+
+```bash
+straincascade -i reads.fastq.gz -r all
+```
+
+## Force Overwrite
+
+By default, existing output files are overwritten. To skip existing outputs:
+
+```bash
+straincascade -i reads.fastq.gz -f no
+```
+
+## Updating StrainCascade
+
+```bash
+# Update software scripts
+straincascade -us
+
+# Update Apptainer images
+straincascade -uai
+
+# Update databases
+straincascade -udb
+```
+
+For instructions on full reinstallation, see [Installation](installation.qmd).
+
+## Caveats
+
+- **Conda environment and PATH in SBATCH jobs:** When submitting `sbatch` jobs, your conda environment will not remain active automatically. If you have multiple installations, activate the correct environment in your SBATCH script to ensure the appropriate paths are used.
+
+- **Resource requirements:** StrainCascade is resource-intensive and will overwhelm standard desktop or laptop computers. Use an HPC environment with at least 32 cores and 96 GB RAM for optimal performance.

@@ -4,8 +4,8 @@
 # This source code is licensed under the MIT No Attribution License (MIT-0)
 # found in the LICENSE file in the root directory of this source tree.
 
-# StrainCascade_NGMLR_BBMap_coverage.sh
-# Description: Performs read mapping and coverage analysis using NGMLR or BBMap based on read length as part of the StrainCascade
+# StrainCascade_minimap2_BBMap_coverage.sh
+# Description: Performs read mapping and coverage analysis using minimap2 (long reads) or BBMap (short reads)
 
 set -euo pipefail
 
@@ -35,17 +35,18 @@ readonly THREADS="${10}"
 readonly GENOME_ASSEMBLY_DIR="${11}"
 
 # Derived constants
-readonly COVERAGE_OUTPUT_DIR="$OUTPUT_DIR/NGMLR_BBMap_coverage_results"
+readonly COVERAGE_OUTPUT_DIR="$OUTPUT_DIR/minimap2_BBMap_coverage_results"
 readonly READ_LENGTH_THRESHOLD=600
 readonly READ_LENGTH_BUFFER=100
 
 # Source utility functions
 source "$UTILS_FILE"
 
-# Validate sequencing type and set NGMLR mode
+# Validate sequencing type and set minimap2 preset
 case "$SEQUENCING_TYPE" in
-    *"pacbio"*) readonly NGMLR_MODE="pacbio" ;;
-    *"nano"*)   readonly NGMLR_MODE="ont" ;;
+    *"pacbio-hifi"*) readonly MINIMAP2_PRESET="map-hifi" ;;
+    *"pacbio"*)      readonly MINIMAP2_PRESET="map-pb" ;;
+    *"nano"*)        readonly MINIMAP2_PRESET="map-ont" ;;
     *)
         log "$LOGS_DIR" "$LOG_NAME" "Skipping: Unsupported sequencing type: $SEQUENCING_TYPE. Requires 'pacbio' or 'nanopore' data."
         exit 0
@@ -65,11 +66,12 @@ analysis_assembly_file=$(find_analysis_assembly_file "$GENOME_ASSEMBLY_DIR")
 # Validate input file
 [[ ! -f "$INPUT_FILE" ]] && {
     log "$LOGS_DIR" "$LOG_NAME" "Error: Input file $INPUT_FILE does not exist."
+    exit 0
 }
 
-# Calculate maximum read length
-log "$LOGS_DIR" "$LOG_NAME" "Calculating maximum read length from $INPUT_FILE (assuming FASTA format)"
-max_read_length=$(awk '/^>/ {if (seqlen>max) max=seqlen; seqlen=0; next} {seqlen+=length($0)} END {if (seqlen>max) max=seqlen; print max}' "$INPUT_FILE") || {
+# Calculate maximum read length (sample first 1000 reads for efficiency)
+log "$LOGS_DIR" "$LOG_NAME" "Calculating maximum read length from $INPUT_FILE (sampling first 1000 reads, assuming FASTA format)"
+max_read_length=$(awk '/^>/ {n++; if (n>1000) exit; if (seqlen>max) max=seqlen; seqlen=0; next} {seqlen+=length($0)} END {if (seqlen>max) max=seqlen; print max}' "$INPUT_FILE") || {
     log "$LOGS_DIR" "$LOG_NAME" "Error: Failed to calculate maximum read length from file."
     exit 1
 }
@@ -90,7 +92,8 @@ straincascade_assembly_qc_refinement_sif=$(find_apptainer_sif_file "$APPTAINER_D
 
 # Prepare mapping command based on read length
 if [[ "$max_read_length" -le $READ_LENGTH_THRESHOLD ]]; then
-    log "$LOGS_DIR" "$LOG_NAME" "Running BBMap alignment"
+    log "$LOGS_DIR" "$LOG_NAME" "Running BBMap alignment (short reads detected)"
+    USE_BBMAP=true
     mapping_cmd="bbmap.sh \
         in=/mnt/sequencing_file_dir/$(basename "$INPUT_FILE") \
         ref=/mnt/assembly_file_dir/$(basename "$analysis_assembly_file") \
@@ -99,27 +102,40 @@ if [[ "$max_read_length" -le $READ_LENGTH_THRESHOLD ]]; then
         overwrite=true \
         path=/mnt/output"
 else
-    log "$LOGS_DIR" "$LOG_NAME" "Running NGMLR alignment"
-    mapping_cmd="ngmlr \
-        -q /mnt/sequencing_file_dir/$(basename "$INPUT_FILE") \
-        -r /mnt/assembly_file_dir/$(basename "$analysis_assembly_file") \
-        -o /mnt/output/${SAMPLE_NAME}_mapped.sam \
-        -x $NGMLR_MODE \
-        -t $THREADS"
+    log "$LOGS_DIR" "$LOG_NAME" "Running minimap2 alignment with preset: $MINIMAP2_PRESET"
+    USE_BBMAP=false
 fi
 
 # Run mapping
-apptainer exec \
-    --bind "$(dirname "$INPUT_FILE")":/mnt/sequencing_file_dir \
-    --bind "$(dirname "$analysis_assembly_file")":/mnt/assembly_file_dir \
-    --bind "$COVERAGE_OUTPUT_DIR":/mnt/output \
-    "$straincascade_assembly_qc_refinement_sif" \
-    bash -c "source /opt/conda/etc/profile.d/conda.sh && \
-             conda activate bbmap_ngmlr_env && \
-             $mapping_cmd" || {
-    log "$LOGS_DIR" "$LOG_NAME" "Error: Mapping failed"
-    exit 1
-}
+if [[ "$USE_BBMAP" == "true" ]]; then
+    apptainer exec \
+        --bind "$(dirname "$INPUT_FILE")":/mnt/sequencing_file_dir \
+        --bind "$(dirname "$analysis_assembly_file")":/mnt/assembly_file_dir \
+        --bind "$COVERAGE_OUTPUT_DIR":/mnt/output \
+        "$straincascade_assembly_qc_refinement_sif" \
+        bash -c "source /opt/conda/etc/profile.d/conda.sh && \
+                 conda activate bbmap_env && \
+                 $mapping_cmd" || {
+        log "$LOGS_DIR" "$LOG_NAME" "Error: BBMap mapping failed"
+        exit 0
+    }
+else
+    # Use minimap2 for long-read mapping
+    apptainer exec \
+        --bind "$(dirname "$INPUT_FILE")":/mnt/sequencing_file_dir \
+        --bind "$(dirname "$analysis_assembly_file")":/mnt/assembly_file_dir \
+        --bind "$COVERAGE_OUTPUT_DIR":/mnt/output \
+        "$straincascade_assembly_qc_refinement_sif" \
+        bash -c "source /opt/conda/etc/profile.d/conda.sh && \
+                 conda activate racon_env && \
+                 minimap2 -ax $MINIMAP2_PRESET -t $THREADS \
+                     /mnt/assembly_file_dir/$(basename "$analysis_assembly_file") \
+                     /mnt/sequencing_file_dir/$(basename "$INPUT_FILE") \
+                     > /mnt/output/${SAMPLE_NAME}_mapped.sam" || {
+        log "$LOGS_DIR" "$LOG_NAME" "Error: minimap2 mapping failed"
+        exit 0
+    }
+fi
 
 # Generate coverage statistics
 log "$LOGS_DIR" "$LOG_NAME" "Generating coverage statistics"
@@ -127,7 +143,7 @@ apptainer exec \
     --bind "$COVERAGE_OUTPUT_DIR":/mnt/input_output \
     "$straincascade_assembly_qc_refinement_sif" \
     bash -c "source /opt/conda/etc/profile.d/conda.sh && \
-             conda activate bbmap_ngmlr_env && \
+             conda activate bbmap_env && \
              pileup.sh \
              in=/mnt/input_output/${SAMPLE_NAME}_mapped.sam \
              out=/mnt/input_output/$(basename "${analysis_assembly_file%.*}_coverage.txt") \
@@ -137,7 +153,8 @@ apptainer exec \
 }
 
 # Copy coverage file to assembly directory
-if coverage_file=$(find "$COVERAGE_OUTPUT_DIR" -type f -name "*_coverage.txt"); then
+coverage_file=$(find "$COVERAGE_OUTPUT_DIR" -type f -name "*_coverage.txt" -print -quit)
+if [[ -n "$coverage_file" ]]; then
     cp "$coverage_file" "$GENOME_ASSEMBLY_DIR"
     log "$LOGS_DIR" "$LOG_NAME" "Coverage statistics copied to assembly directory"
 else
@@ -146,5 +163,5 @@ else
 fi
 
 # Cleanup
-rm -f "$GENOME_ASSEMBLY_DIR"/*.ngm
-log "$LOGS_DIR" "$LOG_NAME" "Temporary NGMLR files cleaned up"
+rm -f "$GENOME_ASSEMBLY_DIR"/*.mmi "$GENOME_ASSEMBLY_DIR"/*.fai
+log "$LOGS_DIR" "$LOG_NAME" "Temporary index files cleaned up"

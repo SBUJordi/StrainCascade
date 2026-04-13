@@ -14,7 +14,7 @@ set -euo pipefail
 show_usage() {
     cat << EOF
 Usage: $0 <script_dir> <logs_dir> <log_name> <utils_file> <apptainer_images_dir> 
-          <results_integration_abs> <genome_assembly_main_abs> <version> <sample_name>
+          <genome_assembly_main_abs> <results_integration_abs> <version> <sample_name>
 EOF
     exit 1
 }
@@ -57,22 +57,91 @@ if [[ -z "$ANALYSIS_ASSEMBLY_FILE" ]]; then
 fi
 log "$LOGS_DIR" "$LOG_NAME" "Using assembly file: $ANALYSIS_ASSEMBLY_FILE"
 
+# =============================================================================
+# STEP 0: NORMALIZE FINAL ASSEMBLY (if not already done)
+# =============================================================================
+# Normalization is normally performed at the end of assembly polishing (SC12).
+# This step is a FALLBACK for cases where:
+# - Assembly-only input was provided (polishing was skipped)
+# - Normalization failed during polishing
+# - Pipeline was run with a custom module selection that skipped polishing
+#
+# If contig_name_mapping.tsv already exists, normalization was already performed.
+
+if [[ -f "${QS_FILES_DIR}/contig_name_mapping.tsv" ]]; then
+    log "$LOGS_DIR" "$LOG_NAME" "Contig names already normalized (mapping file exists). Skipping normalization."
+else
+    log "$LOGS_DIR" "$LOG_NAME" "Contig name mapping not found - running normalization (fallback for assembly-only input)"
+    
+    # Check if Circlator results exist
+    CIRCLATOR_QS=$(find "$QS_FILES_DIR" -name 'circlator_results.qs' -print -quit 2>/dev/null || true)
+    circlator_arg=""
+    if [[ -n "$CIRCLATOR_QS" && -f "$CIRCLATOR_QS" ]]; then
+        circlator_arg="--circlator_qs /mnt/qs_files/$(basename "$CIRCLATOR_QS")"
+        log "$LOGS_DIR" "$LOG_NAME" "Will update Circlator results with normalized names"
+    fi
+
+    apptainer exec \
+        --bind "${R_SCRIPT_DIR}:/mnt/r_script_dir" \
+        --bind "$(dirname "$ANALYSIS_ASSEMBLY_FILE")":/mnt/assembly \
+        --bind "${QS_FILES_DIR}:/mnt/qs_files" \
+        "$r_sif" \
+        Rscript "/mnt/r_script_dir/R_normalize_final_assembly.R" \
+        --fasta "/mnt/assembly/$(basename "$ANALYSIS_ASSEMBLY_FILE")" \
+        --output_dir "/mnt/qs_files" \
+        $circlator_arg || {
+        log "$LOGS_DIR" "$LOG_NAME" "Warning: Assembly normalization failed. Continuing with original names."
+    }
+    
+    # Copy mapping file to genome assembly directory if created
+    if [[ -f "${QS_FILES_DIR}/contig_name_mapping.tsv" ]]; then
+        cp "${QS_FILES_DIR}/contig_name_mapping.tsv" "$(dirname "$ANALYSIS_ASSEMBLY_FILE")/contig_name_mapping.tsv"
+        log "$LOGS_DIR" "$LOG_NAME" "Contig name mapping saved to genome assembly directory"
+    fi
+fi
+
+# =============================================================================
+# STEP 1: PROCESS SELECTED ASSEMBLY
+# =============================================================================
+# Process the (normalized) assembly to create selected_assembly_results.qs
+
+log "$LOGS_DIR" "$LOG_NAME" "Processing selected assembly"
+
+apptainer exec \
+    --bind "${R_SCRIPT_DIR}:/mnt/r_script_dir" \
+    --bind "$(dirname "$ANALYSIS_ASSEMBLY_FILE")":/mnt/assembly \
+    --bind "${QS_FILES_DIR}:/mnt/output" \
+    "$r_sif" \
+    Rscript "/mnt/r_script_dir/R_process_selected_assembly.R" \
+    --fasta "/mnt/assembly/$(basename "$ANALYSIS_ASSEMBLY_FILE")" \
+    --output_dir "/mnt/output" \
+    --version "$VERSION" || {
+    log "$LOGS_DIR" "$LOG_NAME" "Warning: Selected assembly processing failed"
+}
+
+# =============================================================================
+# STEP 2: FIND AND AGGREGATE ANNOTATION RESULTS
+# =============================================================================
+
 # Find annotation result files
 readonly BAKTA_QS=$(find "$QS_FILES_DIR" -name 'bakta_results.qs' -print -quit)
 readonly PROKKA_QS=$(find "$QS_FILES_DIR" -name 'prokka_results.qs' -print -quit)
 readonly MICROBEANNOTATOR_QS=$(find "$QS_FILES_DIR" -name 'microbeannotator_results.qs' -print -quit)
+readonly DEEPFRI_QS=$(find "$QS_FILES_DIR" -name 'deepfri_results.qs' -print -quit)
 
 # Build R script arguments
 r_args=""
 [[ -n "$BAKTA_QS" ]] && r_args+=" --bakta $(basename "$BAKTA_QS")"
 [[ -n "$PROKKA_QS" ]] && r_args+=" --prokka $(basename "$PROKKA_QS")"
 [[ -n "$MICROBEANNOTATOR_QS" ]] && r_args+=" --microbeannotator $(basename "$MICROBEANNOTATOR_QS")"
+[[ -n "$DEEPFRI_QS" ]] && r_args+=" --deepfri $(basename "$DEEPFRI_QS")"
 
 # Log annotation files found
 log "$LOGS_DIR" "$LOG_NAME" "Found annotation files:
 Bakta: ${BAKTA_QS:-not available}
 Prokka: ${PROKKA_QS:-not available}
-MicrobeAnnotator: ${MICROBEANNOTATOR_QS:-not available}"
+MicrobeAnnotator: ${MICROBEANNOTATOR_QS:-not available}
+DeepFRI: ${DEEPFRI_QS:-not available}"
 
 # Process annotation results if available
 if [[ -n "$r_args" ]]; then
@@ -92,6 +161,13 @@ if [[ -n "$r_args" ]]; then
     if [[ -f "${QS_FILES_DIR}/annotation_results_aggregated.qs" ]]; then
         log "$LOGS_DIR" "$LOG_NAME" "Running genome annotation integration"
         
+        # Check if contig name mapping file exists
+        mapping_arg=""
+        if [[ -f "${QS_FILES_DIR}/contig_name_mapping.tsv" ]]; then
+            mapping_arg="--mapping_file /mnt/input_output/contig_name_mapping.tsv"
+            log "$LOGS_DIR" "$LOG_NAME" "Using contig name mapping for annotation integration"
+        fi
+        
         apptainer exec \
             --bind "${R_SCRIPT_DIR}:/mnt/r_script_dir" \
             --bind "${QS_FILES_DIR}:/mnt/input_output" \
@@ -99,6 +175,7 @@ if [[ -n "$r_args" ]]; then
             Rscript "/mnt/r_script_dir/R_genome_annotation_integration.R" \
             --input_file "/mnt/input_output/annotation_results_aggregated.qs" \
             --output_dir "/mnt/input_output" \
+            $mapping_arg \
             --version "$VERSION"
     else
         log "$LOGS_DIR" "$LOG_NAME" "Error: Aggregation failed. Skipping integration step."
@@ -109,6 +186,13 @@ fi
 
 # Clean up previous runs
 rm -f "${RESULTS_DIR}/*.RData"
+
+# Check if contig name mapping file exists for RData generation
+qs2rdata_mapping_arg=""
+if [[ -f "${QS_FILES_DIR}/contig_name_mapping.tsv" ]]; then
+    qs2rdata_mapping_arg="--mapping_file /mnt/input/contig_name_mapping.tsv"
+    log "$LOGS_DIR" "$LOG_NAME" "Using contig name mapping for RData generation"
+fi
 
 # Generate final RData file
 log "$LOGS_DIR" "$LOG_NAME" "Generating final RData file"
@@ -121,7 +205,8 @@ apptainer exec \
     Rscript "/mnt/r_script_dir/R_qs2RData.R" \
     --sample_name "${SAMPLE_NAME}" \
     --input_dir "/mnt/input" \
-    --output_dir "/mnt/output" || {
+    --output_dir "/mnt/output" \
+    $qs2rdata_mapping_arg || {
     log "$LOGS_DIR" "$LOG_NAME" "Error: Final data integration failed"
     exit 0
 }

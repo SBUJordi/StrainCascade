@@ -1,0 +1,126 @@
+---
+title: "Installation"
+---
+
+## System Requirements
+
+- Linux OS (e.g., CentOS, Ubuntu, Debian, etc.)
+- ~590 GB disk space for software and reference databases
+- For optimal performance: 32 CPU cores with 3 GB RAM per core (96 GB total). SC16 (*de novo* tree generation) may require >100 GB RAM.
+
+## Dependencies
+
+- [Git](https://git-scm.com/)
+- [Apptainer](https://apptainer.org/)
+- [Bash](https://tiswww.case.edu/php/chet/bash/bashtop.html) as command-line shell
+- Optional: [Conda/Miniconda](https://docs.anaconda.com/miniconda/)
+- All further software dependencies are bundled in Apptainer images, automatically downloaded during installation. This ensures:
+  1. **Ease of use** — simplified installation and execution
+  2. **Portability** — consistent performance across computing environments
+  3. **Reproducibility** — identical software environments for all users
+  4. **Version control** — precise management of software versions
+  5. **Isolation** — minimal conflicts with existing system libraries
+
+## Default Installation (Interactive)
+
+Optional — create and activate a conda environment:
+
+```bash
+conda create -n StrainCascade_env
+conda activate StrainCascade_env
+```
+
+Optional — navigate to the conda environment directory:
+
+```bash
+cd $CONDA_PREFIX
+```
+
+Clone the repository:
+
+```bash
+git clone https://github.com/SBUJordi/StrainCascade.git
+```
+
+Navigate to the StrainCascade directory:
+
+```bash
+cd StrainCascade
+```
+
+Make all scripts executable:
+
+```bash
+find scripts/ -type f -exec chmod +x {} \;
+```
+
+Run the installation script:
+
+```bash
+# Interactive installation with normal verbosity (recommended)
+./scripts/StrainCascade_installation.sh
+
+# Quiet full installation
+STRAINCASCADE_VERBOSITY=0 ./scripts/StrainCascade_installation.sh --full
+
+# Verbose interactive installation
+STRAINCASCADE_VERBOSITY=2 ./scripts/StrainCascade_installation.sh
+```
+
+::: {.callout-note}
+The installation may take between 12 hours to over a day, depending on your system and network speed.
+:::
+
+If you choose the default interactive installation, you will be prompted:
+
+```
+Running StrainCascade installation...
+Sufficient disk space available: XXXGB
+Apptainer is installed.
+Do you want to do a full installation of StrainCascade? (y/n)
+```
+
+## Custom Installation
+
+If you choose `n` when prompted for a full installation, you can selectively install individual Apptainer images and databases. This is useful when:
+
+- You have limited disk space or bandwidth
+- A previous installation was interrupted
+- You want to isolate specific components for testing
+
+Each component will be offered individually:
+
+```
+Do you want to install checkm2_db? (y/n)
+```
+
+## Updating StrainCascade
+
+StrainCascade provides separate update mechanisms for its three main components:
+
+```bash
+# Update software scripts
+straincascade -us
+
+# Update Apptainer images
+straincascade -uai
+
+# Update databases
+straincascade -udb
+```
+
+::: {.callout-tip}
+These individual update mechanisms are designed for minor version updates and patches. Major version releases with significant new features may require a complete reinstallation.
+:::
+
+## Caveats
+
+- **PATH configuration for multiple installations:** The installation process updates your `PATH` variable. If you experience issues with multiple installations, verify that `$PATH` points to the correct one.
+
+- **Third-party database installation:** Larger databases (e.g., GTDB-Tk, AMRFinderPlus for Bakta) may occasionally fail due to network or server issues. Retry after a few hours if problems occur.
+
+- **Managing Apptainer images after updates:** Newer image versions may be downloaded during updates. StrainCascade prioritises the first matching image. Check and clean the `apptainer_images` directory after re-installations:
+
+  ```bash
+  cd $(dirname $(which straincascade))/../apptainer_images
+  ```

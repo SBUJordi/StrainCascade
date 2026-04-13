@@ -120,11 +120,13 @@ log "$LOGS_DIR" "$LOG_NAME" "Using $THREADS threads"
 CURRENT_INPUT="$INPUT_FILE"
 PROCESSED_OUTPUT="" # Track the most recently processed output
 
-# Create deterministic entropy source
-readonly ENTROPY_FILE="$CANU_OUTPUT_DIR/deterministic_entropy_file"
-if [[ ! -f "$ENTROPY_FILE" ]]; then
-    dd if=/dev/zero bs=1024 count=100 > "$ENTROPY_FILE"
-    log "$LOGS_DIR" "$LOG_NAME" "Deterministic entropy file created at $ENTROPY_FILE"
+# Entropy source binding for deterministic reproducibility only
+# Using /dev/zero (infinite stream) instead of a finite file to prevent
+# exhaustion-related hangs during long-running assembly stages
+ENTROPY_ARGS=()
+if [[ "${REPRODUCIBILITY_MODE}" == "deterministic" ]]; then
+    ENTROPY_ARGS=(--bind /dev/zero:/dev/random --bind /dev/zero:/dev/urandom)
+    log "$LOGS_DIR" "$LOG_NAME" "Deterministic mode: binding /dev/zero as entropy source"
 fi
 
 # Correction step if needed
@@ -134,8 +136,7 @@ if [[ "$DO_CORRECTION" == "true" ]]; then
     apptainer exec \
         --bind "$(dirname "$CURRENT_INPUT")":/mnt/input \
         --bind "$CANU_OUTPUT_DIR":/mnt/output \
-        --bind "$ENTROPY_FILE":/dev/random \
-        --bind "$ENTROPY_FILE":/dev/urandom \
+        ${ENTROPY_ARGS[@]+"${ENTROPY_ARGS[@]}"} \
         "$canu_sif" canu \
         -correct \
         -p "${SAMPLE_NAME}_correction" \
@@ -190,8 +191,7 @@ if [[ "$DO_TRIMMING" == "true" ]]; then
     apptainer exec \
         --bind "$(dirname "$CURRENT_INPUT")":/mnt/input \
         --bind "$CANU_OUTPUT_DIR":/mnt/output \
-        --bind "$ENTROPY_FILE":/dev/random \
-        --bind "$ENTROPY_FILE":/dev/urandom \
+        ${ENTROPY_ARGS[@]+"${ENTROPY_ARGS[@]}"} \
         "$canu_sif" canu \
         -trim \
         -p "${SAMPLE_NAME}_trimming" \

@@ -1,0 +1,65 @@
+---
+title: "Software Licenses"
+---
+
+## StrainCascade License
+
+```
+MIT No Attribution License
+
+Copyright (c) 2024-2025, University of Bern, Department for BioMedical Research,
+Sebastian Bruno Ulrich JORDI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished to do so.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+---
+
+## Third-Party Tool Licenses
+
+::: {.callout-note}
+The information provided here is for general guidance only. We do not guarantee the correctness or completeness of the license details listed. Users are strongly encouraged to verify the licenses of the software tools themselves to ensure compliance with their intended use.
+:::
+
+| Module | Tool | License | URL |
+|--------|------|---------|-----|
+| SC1, SC4 | Canu | GNU GPL v2, BSD-3-Clause | [GitHub](https://github.com/marbl/canu) |
+| SC2 | LJA | BSD-3-Clause | [GitHub](https://github.com/AntonBankevich/LJA) |
+| SC3 | SPAdes | GNU GPL v2 | [GitHub](https://github.com/ablab/spades) |
+| SC5 | Flye | BSD-3-Clause | [GitHub](https://github.com/mikolmogorov/Flye) |
+| SC6 | Unicycler | GNU GPL v3 | [GitHub](https://github.com/rrwick/Unicycler) |
+| SC7, SC9, SC11 | QUAST | GNU GPL v2 | [GitHub](https://github.com/ablab/quast) |
+| SC8 | MAC2.0 | No license available | [GitHub](https://github.com/bioinfomaticsCSU/MAC) |
+| SC10 | Circlator | GNU GPL v3 | [GitHub](https://github.com/sanger-pathogens/circlator) |
+| SC12 | Arrow | BSD-3-Clause-Clear | [Bioconda](https://anaconda.org/bioconda/genomicconsensus) |
+| SC12 | Medaka | MPL-2.0 | [GitHub](https://github.com/nanoporetech/medaka) |
+| SC12 | Polypolish | GNU GPL v3 | [GitHub](https://github.com/rrwick/Polypolish) |
+| SC12 | Racon | MIT | [GitHub](https://github.com/lbcb-sci/racon) |
+| SC13 | minimap2 | MIT | [GitHub](https://github.com/lh3/minimap2) |
+| SC13 | BBMap | BSD-3-Clause-like | [SourceForge](https://sourceforge.net/projects/bbmap/) |
+| SC14 | CheckM2 | GNU GPL v3 | [GitHub](https://github.com/chklovski/CheckM2) |
+| SC15, SC16 | GTDB-Tk | GNU GPL v3 | [GitHub](https://github.com/Ecogenomics/GTDBTk) |
+| SC17 | Bakta | GNU GPL v3 | [GitHub](https://github.com/oschwengers/bakta) |
+| SC18 | Prokka | GNU GPL v3 | [GitHub](https://github.com/tseemann/prokka) |
+| SC19 | DeepFRI | MIT | [GitHub](https://github.com/flatironinstitute/DeepFRI) |
+| SC20 | MicrobeAnnotator | Artistic License 2.0 | [GitHub](https://github.com/cruizperez/MicrobeAnnotator) |
+| SC21 | PlasmidFinder | Apache License 2.0 | [GitHub](https://github.com/kcri-tz/plasmidfinder) |
+| SC22 | AMRFinderPlus | Public Domain | [GitHub](https://github.com/ncbi/amr) |
+| SC23 | ResFinder | Apache License 2.0 | [GitHub](https://github.com/genomicepidemiology/resfinder) |
+| SC24 | dbCAN3 | GNU GPL v3 | [GitHub](https://github.com/linnabrown/run_dbcan) |
+| SC25 | IslandPath-DIMOB | GNU GPL v3 | [GitHub](https://github.com/brinkmanlab/islandpath) |
+| SC26 | VirSorter2 | GNU GPL v2 | [GitHub](https://github.com/jiarong/VirSorter2) |
+| SC27 | geNomad | Academic use | [GitHub](https://github.com/apcamargo/genomad) |
+| SC28 | CRISPRCasFinder | GNU GPL v3 | [GitHub](https://github.com/dcouvin/CRISPRCasFinder) |
+| SC29 | ISEScan | Apache License 2.0 | [GitHub](https://github.com/xiezhq/ISEScan) |

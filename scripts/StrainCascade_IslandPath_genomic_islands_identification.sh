@@ -103,7 +103,8 @@ apptainer exec \
 }
 
 # Copy output files to functional analysis directory
-if output_files=$(find "$ISLANDPATH_OUTPUT_DIR" -name "*.gff3" -type f); then
+output_files=$(find "$ISLANDPATH_OUTPUT_DIR" -name "*.gff3" -type f)
+if [[ -n "$output_files" ]]; then
     for file in $output_files; do
         cp "$file" "$FUNCTIONAL_ANALYSIS_DIR/"
     done

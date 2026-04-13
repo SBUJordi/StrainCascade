@@ -72,7 +72,7 @@ create_tree_plot <- function(tree_file, sample_name, taxonomic_classification) {
   
   subtree <- keep.tip(tree, neighbor_tips, trim.internal = TRUE)
   nudge <- max(subtree$edge.length) * 0.06
-  subtree$tip.label[subtree$tip.label == filtered_tips] <- sample_name
+  subtree$tip.label[subtree$tip.label == tip_of_interest] <- sample_name
   
   p <- ggtree(subtree) +
     geom_tiplab(aes(label = label), align = TRUE, linetype = "dotted") +

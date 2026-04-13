@@ -13,21 +13,20 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly INSTALLATION_UTILS_FILE="$SCRIPT_DIR/StrainCascade_installation_utils.sh"
 
-# Main script execution
+# Validate environment before sourcing utilities
+if [[ ! -f "$INSTALLATION_UTILS_FILE" ]]; then
+    echo "Error: Please launch the installation from within the scripts directory"
+    exit 1
+fi
+cd "$SCRIPT_DIR" || { echo "Error: Failed to change to the script's directory"; exit 1; }
+
+# Source utility functions
 source "$INSTALLATION_UTILS_FILE"
 
-# Check environment setup
-check_main_directory() {
-    if [[ ! -f "$INSTALLATION_UTILS_FILE" ]]; then
-        echo "Error: Please launch the installation from within the scripts directory"
-        exit 1
-    fi
-    cd "$SCRIPT_DIR" || { echo "Error: Failed to change to the script's directory"; exit 1; }
-}
-
-# Execute checks
+# Execute environment checks
 check_main_directory
 check_disk_space
+check_required_tools
 check_apptainer_installation
 check_existing_installations
 

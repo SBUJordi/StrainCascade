@@ -1,0 +1,127 @@
+---
+title: ""
+page-layout: full
+title-block-banner: false
+---
+
+::: {style="text-align: center; margin: 2em 0 1.5em;"}
+![](images/straincascade_logo_colour.png){.darkmode width="100%" fig-alt="StrainCascade"}
+![](images/straincascade_logo_colour_whitebackground.png){.lightmode width="100%" fig-alt="StrainCascade"}
+:::
+
+## Overview
+
+**StrainCascade** is a modular bioinformatics pipeline designed to comprehensively process genomic data of bacterial isolates, supporting both long-read sequencing data (PacBio or ONT) and pre-assembled genomes as input. Its automatic and customisable workflow spans genome assembly, taxonomic classification, genome annotation, functional analysis, plasmid detection, antimicrobial resistance screening, CAZyme identification, phage detection, and more.
+
+---
+
+## Key Features (v2.0.0)
+
+| Feature | Description |
+|---------|-------------|
+| **30 modules** | SC1–SC30: from read correction to interactive HTML report |
+| **5 assemblers** | Canu, LJA, SPAdes, Flye, Unicycler — consensus merging via MAC2 |
+| **Hybrid assembly** | Optional short-read input for Unicycler hybrid mode and Polypolish polishing |
+| **Deep-learning annotation** | DeepFRI for GO/EC prediction, integrated into Bakta/Prokka consensus |
+| **geNomad integration** | Marker-based viral & plasmid identification alongside VirSorter2 |
+| **Deterministic mode** | Full reproducibility via single-threaded execution and fixed entropy |
+| **Containerised** | All tools run in Apptainer containers for portability and reproducibility |
+| **Execution modes** | minimal, efficient, standard, comprehensive, custom, or bundle presets |
+
+---
+
+## Pipeline Architecture
+
+::: {.pipeline-flow}
+```
+Long reads (PacBio / ONT)               Short reads (optional)
+        │                                       │
+        ▼                                       │
+┌───────────────────┐                           │
+│  SC1: Canu Trim   │                           │
+└────────┬──────────┘                           │
+         │                                      │
+         ▼                                      │
+┌─────────────────────────────────────────┐     │
+│  SC2–SC6: Multi-Assembler Suite         │◀────┘
+│  LJA · SPAdes · Canu · Flye · Unicycler│  (hybrid via Unicycler)
+└────────┬────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────┐
+│  SC7: Assembly Evaluation 1 │
+│  SC8: MAC2 Consensus Merge  │
+│  SC9: Assembly Evaluation 2 │
+└────────┬────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────┐
+│  SC10: Circlator Circularisation │
+│  SC11: Assembly Evaluation 3     │
+│  SC12: Polishing (Arrow/Medaka   │
+│        + optional Polypolish)    │
+│  SC13: Coverage (minimap2+BBMap) │
+└────────┬─────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────┐
+│  SC14: CheckM2 QC                    │
+│  SC15: GTDB-Tk Taxonomy              │
+│  SC16: GTDB-Tk De Novo Tree          │
+└────────┬─────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────┐
+│  SC17: Bakta Annotation              │
+│  SC18: Prokka Annotation             │
+│  SC19: DeepFRI (GO + EC prediction)  │
+│  SC20: MicrobeAnnotator              │
+└────────┬─────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────┐
+│  SC21: PlasmidFinder                 │
+│  SC22: AMRFinderPlus                 │
+│  SC23: ResFinder                     │
+│  SC24: dbCAN3 CAZymes                │
+│  SC25: IslandPath Genomic Islands    │
+│  SC26: VirSorter2 Phage Detection    │
+│  SC27: geNomad Viral/Plasmid ID      │
+│  SC28: CRISPRCasFinder               │
+│  SC29: ISEScan IS Elements           │
+└────────┬─────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────┐
+│  SC30: Data Integration & Report     │
+└──────────────────────────────────────┘
+```
+:::
+
+---
+
+## Quick Example
+
+```bash
+# From long reads
+straincascade -i reads.fastq.gz -o output/ -s pacbio-hifi -t 32
+
+# Hybrid assembly with short reads
+straincascade -i longreads.fastq.gz -sr1 R1.fastq.gz -sr2 R2.fastq.gz -o output/
+
+# From pre-assembled genome
+straincascade -a assembly.fasta -o output/ -t 32
+
+# Deterministic mode
+straincascade -i reads.fastq.gz -o output/ --deterministic
+```
+
+See the [Quick Start](quickstart.qmd) and [Installation](installation.qmd) pages for full details.
+
+---
+
+## Citation
+
+If you use StrainCascade in your research, please cite:
+
+> Jordi SBU et al. StrainCascade: A modular pipeline for comprehensive bacterial genome assembly and annotation from long-read sequencing data. *[Journal]* (2025). [DOI]

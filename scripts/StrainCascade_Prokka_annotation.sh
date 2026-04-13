@@ -49,11 +49,13 @@ else
     readonly THREADS="${INITIAL_THREADS}"
 fi
 
-# Create deterministic entropy source
-readonly ENTROPY_FILE="$OUTPUT_DIR/deterministic_entropy_file"
-if [[ ! -f "$ENTROPY_FILE" ]]; then
-    dd if=/dev/zero bs=1024 count=100 > "$ENTROPY_FILE"
-    log "$LOGS_DIR" "StrainCascade.log" "Deterministic entropy file created at $ENTROPY_FILE"
+# Entropy source binding for deterministic reproducibility only
+# Using /dev/zero (infinite stream) instead of a finite file to prevent
+# exhaustion-related hangs during long-running annotation stages
+ENTROPY_ARGS=()
+if [[ "${REPRODUCIBILITY_MODE}" == "deterministic" ]]; then
+    ENTROPY_ARGS=(--bind /dev/zero:/dev/random --bind /dev/zero:/dev/urandom)
+    log "$LOGS_DIR" "$LOG_NAME" "Deterministic mode: binding /dev/zero as entropy source"
 fi
 
 # Derived constants
@@ -100,8 +102,7 @@ log "$LOGS_DIR" "$LOG_NAME" "Running Prokka annotation for $analysis_assembly_fi
 apptainer exec \
     --bind "$(dirname "$analysis_assembly_file")":/mnt/input \
     --bind "$PROKKA_OUTPUT_DIR":/mnt/output \
-    --bind "$ENTROPY_FILE":/dev/random \
-    --bind "$ENTROPY_FILE":/dev/urandom \
+    ${ENTROPY_ARGS[@]+"${ENTROPY_ARGS[@]}"} \
     "$straincascade_genome_annotation_sif" \
     bash -c "source /opt/conda/etc/profile.d/conda.sh && \
              conda activate prokka_env && \
@@ -115,7 +116,8 @@ apptainer exec \
 
 # Copy output files to genome annotation directory
 for ext in "${OUTPUT_EXTENSIONS[@]}"; do
-    if files=$(find "$PROKKA_OUTPUT_DIR" -type f -name "*$ext"); then
+    files=$(find "$PROKKA_OUTPUT_DIR" -type f -name "*$ext")
+    if [[ -n "$files" ]]; then
         for file in $files; do
             cp "$file" "$GENOME_ANNOTATION_DIR"
         done

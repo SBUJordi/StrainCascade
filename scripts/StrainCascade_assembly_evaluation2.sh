@@ -54,18 +54,30 @@ if [[ ${#assemblies[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Remove and recreate output directory
+# Clean up old evaluation results to handle re-runs properly
+log "$LOGS_DIR" "$LOG_NAME" "Removing existing evaluation directory for clean re-run"
 rm -rf "$EVAL_OUTPUT_DIR"
+
+# Remove old best_ev2 files from genome assembly directory
+while IFS= read -r -d '' file; do
+    log "$LOGS_DIR" "$LOG_NAME" "Removing old evaluation file: $(basename "$file")"
+    rm -f "$file"
+done < <(find "$GENOME_ASSEMBLY_DIR" -type f -name "*_best_ev2.fasta" -print0)
+
 create_directory "$EVAL_OUTPUT_DIR"
 
-# Process each assembly with QUAST
+# Process each assembly with QUAST (parallel execution, each using 1 thread)
+quast_output_dirs=()
+quast_files=()
+running_jobs=0
+
 for assembly in "${assemblies[@]}"; do
     file=$(basename "$assembly")
     pattern_name=$(basename "$file" .fasta)
     quast_output_dir="${EVAL_OUTPUT_DIR}/${SAMPLE_NAME}_${pattern_name}_quast_output"
     
     create_directory "$quast_output_dir"
-    log "$LOGS_DIR" "$LOG_NAME" "Running QUAST analysis for $file"
+    log "$LOGS_DIR" "$LOG_NAME" "Launching QUAST analysis for $file"
     
     apptainer exec \
         --bind "$GENOME_ASSEMBLY_DIR:/data" \
@@ -73,11 +85,34 @@ for assembly in "${assemblies[@]}"; do
         "$straincascade_assembly_qc_refinement_sif" \
         bash -c "source /opt/conda/etc/profile.d/conda.sh && \
                  conda activate quast_env && \
-                 quast.py /data/$file -o /output -t $THREADS"
+                 quast.py /data/$file -o /output -t 1" &
     
-    # Append QUAST report if available
+    quast_output_dirs+=("$quast_output_dir")
+    quast_files+=("$file")
+    running_jobs=$((running_jobs + 1))
+    
+    # Limit concurrent QUAST jobs to THREADS
+    if (( running_jobs >= THREADS )); then
+        wait -n 2>/dev/null || true
+        running_jobs=$((running_jobs - 1))
+    fi
+done
+
+# Wait for all remaining QUAST jobs to complete
+wait 2>/dev/null || true
+
+# Collect QUAST reports sequentially
+for i in "${!quast_output_dirs[@]}"; do
+    quast_output_dir="${quast_output_dirs[$i]}"
+    file="${quast_files[$i]}"
+    
+    # Append QUAST report if available (skip header if report already has content)
     if [[ -f "$quast_output_dir/transposed_report.tsv" ]]; then
-        cat "$quast_output_dir/transposed_report.tsv" >> "${EVAL_OUTPUT_DIR}/$QUAST_REPORT_FILE"
+        if [[ -s "${EVAL_OUTPUT_DIR}/$QUAST_REPORT_FILE" ]]; then
+            tail -n +2 "$quast_output_dir/transposed_report.tsv" >> "${EVAL_OUTPUT_DIR}/$QUAST_REPORT_FILE"
+        else
+            cat "$quast_output_dir/transposed_report.tsv" >> "${EVAL_OUTPUT_DIR}/$QUAST_REPORT_FILE"
+        fi
     else
         log "$LOGS_DIR" "$LOG_NAME" "Warning: QUAST failed to produce output for $file"
     fi

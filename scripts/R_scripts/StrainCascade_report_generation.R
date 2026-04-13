@@ -94,6 +94,8 @@ suppressPackageStartupMessages({
   library(flexdashboard)
   library(DT)
   library(plotly)
+  library(ggplot2)
+  library(ggtree)
   library(dplyr)
   library(tidyr)
   library(kableExtra)
@@ -103,7 +105,7 @@ suppressPackageStartupMessages({
   library(grid)
 })
 
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, error = TRUE)
 load(params$rdata_file)
 
 # Function to safely get data
@@ -257,7 +259,7 @@ if (!is.null(checkm2_data)) {
       coding_density_checkm2 = round((coding_density_checkm2*100), 2)
     )
 
-  selected_checkm2_data <- t(checkm2_data[, c('completeness_checkm2', 'contamination_checkm2', 'coding_density_checkm2')])
+  selected_checkm2_data <- t(selected_checkm2_data[, c('completeness_checkm2', 'contamination_checkm2', 'coding_density_checkm2')])
   rownames(selected_checkm2_data) <- formatted_col_names
 
   kable(selected_checkm2_data,
@@ -275,6 +277,9 @@ Column {data-width=500}
 ```{r assembly_sc_circlator}
 assembly_data <- safe_get('selected_assembly_results')
 if (!is.null(assembly_data)) {
+  
+  # Assembly data should already have normalized contig names (contig_1, contig_2, etc.)
+  # from the R_normalize_final_assembly.R step in data integration
   
   SC_circlator_assembly_data <- assembly_data |>
     select(
@@ -297,7 +302,9 @@ if (!is.null(assembly_data)) {
 
   circlator_data <- safe_get('circlator_results')
   selected_circlator_data <- NULL  # Initialize variable
-  if (!is.null(circlator_data)) {  
+  if (!is.null(circlator_data)) {
+    # Circlator results should already have normalized contig names
+    # from R_normalize_final_assembly.R updating the QS file
     selected_circlator_data <- circlator_data |>
     select(
       contig_tag_fasta,
@@ -311,7 +318,7 @@ if (!is.null(assembly_data)) {
   }
 
   if (!is.null(selected_circlator_data)) { 
-    SC_circlator_assembly_data <- merge(SC_circlator_assembly_data, selected_circlator_data, by = 'contig_tag_fasta', all = TRUE)
+    SC_circlator_assembly_data <- merge(SC_circlator_assembly_data, selected_circlator_data, by = 'contig_tag_fasta', all.x = TRUE)
     SC_circlator_assembly_data <- SC_circlator_assembly_data |>
     select(
       contig_tag_fasta,
@@ -415,6 +422,98 @@ if (!is.null(quast_data)) {
 Column {.tabset data-width=400}
 -------------------------------------
 
+### Identified plasmids by geNomad
+
+```{r genomad_plasmid_table}
+genomad_plasmid_data <- safe_get('genomad_plasmid_results')
+
+if (!is.null(genomad_plasmid_data) && nrow(genomad_plasmid_data) > 0) {
+  genomad_plasmid_adapted <- genomad_plasmid_data |>
+    select(
+      contig_tag_fasta,
+      contig_tag_genomad,
+      length_bp,
+      topology_genomad,
+      n_genes_genomad,
+      plasmid_score_genomad,
+      fdr_genomad,
+      n_hallmarks_genomad,
+      marker_enrichment_genomad,
+      conjugation_genes_genomad,
+      amr_genes_genomad
+    ) |>
+    rename(
+      `Contig` = contig_tag_fasta,
+      `Plasmid ID` = contig_tag_genomad,
+      `Length (bp)` = length_bp,
+      `Topology` = topology_genomad,
+      `Number of genes` = n_genes_genomad,
+      `Plasmid score` = plasmid_score_genomad,
+      `FDR` = fdr_genomad,
+      `Hallmarks` = n_hallmarks_genomad,
+      `Marker enrichment` = marker_enrichment_genomad,
+      `Conjugation genes` = conjugation_genes_genomad,
+      `AMR genes` = amr_genes_genomad
+    )
+  
+  datatable(genomad_plasmid_adapted,
+            options = list(pageLength = 10))
+} else if (!is.null(genomad_plasmid_data)) {
+  cat('geNomad plasmid analysis completed but no plasmids were identified.')
+} else {
+  cat('geNomad was not run or did not produce plasmid results.')
+}
+```
+
+### Nucleotide code (geNomad)
+
+```{r genomad_plasmid_table_nc}
+genomad_plasmid_data <- safe_get('genomad_plasmid_results')
+
+if (!is.null(genomad_plasmid_data) && nrow(genomad_plasmid_data) > 0) {
+  # Check if gene-level data with nucleotide codes exists
+  if ('gene_id_genomad' %in% colnames(genomad_plasmid_data)) {
+    genomad_plasmid_sequences <- genomad_plasmid_data |>
+      select(
+        contig_tag_genomad,
+        gene_id_genomad,
+        start_position,
+        end_position,
+        annotation_description_genomad
+      ) |>
+      rename(
+        `Plasmid ID` = contig_tag_genomad,
+        `Gene ID` = gene_id_genomad,
+        `Start position` = start_position,
+        `End position` = end_position,
+        `Annotation` = annotation_description_genomad
+      )
+    
+    datatable(genomad_plasmid_sequences,
+              options = list(pageLength = 10))
+  } else {
+    genomad_plasmid_sequences <- genomad_plasmid_data |>
+      select(
+        contig_tag_genomad,
+        length_bp,
+        plasmid_score_genomad
+      ) |>
+      rename(
+        `Plasmid ID` = contig_tag_genomad,
+        `Length (bp)` = length_bp,
+        `Plasmid score` = plasmid_score_genomad
+      )
+    
+    datatable(genomad_plasmid_sequences,
+              options = list(pageLength = 10))
+  }
+} else if (!is.null(genomad_plasmid_data)) {
+  cat('geNomad plasmid analysis completed but no plasmids were identified.')
+} else {
+  cat('geNomad was not run or did not produce plasmid results.')
+}
+```
+
 ### Identified plasmids by PlasmidFinder
 
 ```{r plasmidfinder_table}
@@ -463,11 +562,11 @@ if (!is.null(plasmidfinder_data)) {
               options = list(pageLength = 10))
   }
 } else {
-  cat('PlasmidFinder results not available.')
+  cat('PlasmidFinder was not run or did not produce results.')
 }
 ```
 
-### Nucleotide code
+### Nucleotide code (PlasmidFinder)
 
 ```{r plasmidfinder_table_nc}
 plasmidfinder_data <- safe_get('plasmidfinder_results')
@@ -496,7 +595,7 @@ if (!is.null(plasmidfinder_data)) {
               options = list(pageLength = 10))
   }
 } else {
-  cat('PlasmidFinder sequence data not available.')
+  cat('PlasmidFinder was not run or did not produce results.')
 }
 ```
 
@@ -547,10 +646,16 @@ Column {fig-width=400}
 ```{r taxonomy_plot, fig.width=15, fig.height=10}
 tree_plot <- safe_get('gtdbtk_25_tree_plot')
 if (!is.null(tree_plot)) {
-  tree_plot_adapt <- tree_plot + 
-    labs(title = NULL, subtitle = NULL) + 
-    theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), 'cm'))
-  print(tree_plot_adapt)
+  tryCatch({
+    # Attempt to render the saved plot object
+    tree_plot_adapt <- tree_plot + 
+      ggplot2::labs(title = NULL, subtitle = NULL) + 
+      ggplot2::theme(plot.margin = ggplot2::unit(c(0.5, 0.5, 0.5, 0.5), 'cm'))
+    print(tree_plot_adapt)
+  }, error = function(e) {
+    # If plot object fails to render, show message
+    cat('Taxonomic tree visualization could not be rendered. Please view the PDF version in the results directory.')
+  })
 } else {
   cat('Taxonomic tree not available.')
 }
@@ -644,7 +749,7 @@ if (!is.null(annotation_data)) {
 Column {.tabset data-width=1000}
 -------------------------------------
 
-### Gene table with color-coded confidence
+### Gene table
 
 ```{r annotation_table}
 if (!is.null(annotation_data)) {
@@ -850,7 +955,7 @@ plot_ly(
 ### COG categories (Bakta)
 
 ```{r COG_plot}
-if (!is.null(annotation_data)) {
+if (!is.null(annotation_data) && 'COG_category_SC' %in% colnames(annotation_data)) {
 # Define functional groups and color mapping
 cog_labels <- data.frame(
   COG_category_SC = c('J', 'A', 'K', 'L', 'D', 'Y', 'V', 'T', 'M', 'N', 'Z', 'W', 'U', 'O', 'X', 
@@ -949,7 +1054,7 @@ Column {.tabset data-width=400}
 
 ```{r islandpath_table}
 islandpath_data <- safe_get('islandpath_results')
-if (!is.null(islandpath_data)) {
+if (!is.null(islandpath_data) && nrow(islandpath_data) > 0) {
     islandpath_data_adapted <- islandpath_data |>
     select(contig_tag_fasta, type_islandpath, start_position, end_position, length_bp, strand, source_file_islandpath) |>
     rename(
@@ -964,8 +1069,10 @@ if (!is.null(islandpath_data)) {
 
   datatable(islandpath_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(islandpath_data)) {
+  cat('IslandPath analysis completed but no genomic islands were identified.')
 } else {
-  cat('IslandPath results not available.')
+  cat('IslandPath was not run or did not produce results.')
 }
 ```
 
@@ -973,7 +1080,7 @@ if (!is.null(islandpath_data)) {
 
 ```{r islandpath_table_nc}
 islandpath_data <- safe_get('islandpath_results')
-if (!is.null(islandpath_data)) {
+if (!is.null(islandpath_data) && nrow(islandpath_data) > 0) {
     islandpath_data_adapted <- islandpath_data |>
     select(contig_tag_fasta, nucleotide_code) |>
     rename(
@@ -983,8 +1090,10 @@ if (!is.null(islandpath_data)) {
 
   datatable(islandpath_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(islandpath_data)) {
+  cat('IslandPath analysis completed but no genomic islands were identified.')
 } else {
-  cat('IslandPath results not available.')
+  cat('IslandPath was not run or did not produce results.')
 }
 ```
 
@@ -995,7 +1104,7 @@ if (!is.null(islandpath_data)) {
   
 ```{r isescan_table}
 isescan_data <- safe_get('isescan_results')
-if (!is.null(isescan_data)) {
+if (!is.null(isescan_data) && nrow(isescan_data) > 0) {
   isescan_data_adapted <- isescan_data |>
     select(
       contig_tag_fasta, 
@@ -1028,16 +1137,15 @@ if (!is.null(isescan_data)) {
 
   datatable(isescan_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(isescan_data)) {
+  cat('ISEScan analysis completed but no insertion sequence elements were identified.')
 } else {
-  cat('ISEScan results not available.')
+  cat('ISEScan was not run or did not produce results.')
 }
-```
-
-### Inverted repeats (IR)
 
 ```{r isescan_table_ir}
 isescan_data <- safe_get('isescan_results')
-if (!is.null(isescan_data)) {
+if (!is.null(isescan_data) && nrow(isescan_data) > 0) {
   isescan_data_adapted <- isescan_data |>
     select(
       contig_tag_fasta, 
@@ -1051,7 +1159,7 @@ if (!is.null(isescan_data)) {
       terminal_inverted_repeat_sequence
     ) |>
     rename(
-      `Contig` = contig_tag_fasta,,
+      `Contig` = contig_tag_fasta,
       `1. IR start position` = first_inverted_repeat_start_position,
       `1. IR end position` = first_inverted_repeat_end_position,
       `2. IR start position` = second_inverted_repeat_start_position,
@@ -1064,16 +1172,15 @@ if (!is.null(isescan_data)) {
   
   datatable(isescan_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(isescan_data)) {
+  cat('ISEScan analysis completed but no insertion sequence elements were identified.')
 } else {
-  cat('ISEScan results not available.')
+  cat('ISEScan was not run or did not produce results.')
 }
-```
-
-### Nucleotide code (IS)
 
 ```{r isescan_table_is_nc}
 isescan_data <- safe_get('isescan_results')
-if (!is.null(isescan_data)) {
+if (!is.null(isescan_data) && nrow(isescan_data) > 0) {
   isescan_data_adapted <- isescan_data |>
     select(
       contig_tag_fasta, 
@@ -1082,7 +1189,7 @@ if (!is.null(isescan_data)) {
       insertion_sequence_nucleotide_code
     ) |>
     rename(
-      `Contig` = contig_tag_fasta,,
+      `Contig` = contig_tag_fasta,
       `IS start position` = insertion_sequence_start_position,
       `IS end position` = insertion_sequence_end_position,
       `IS nucleotide code` = insertion_sequence_nucleotide_code
@@ -1090,16 +1197,15 @@ if (!is.null(isescan_data)) {
   
   datatable(isescan_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(isescan_data)) {
+  cat('ISEScan analysis completed but no insertion sequence elements were identified.')
 } else {
-  cat('ISEScan results not available.')
+  cat('ISEScan was not run or did not produce results.')
 }
-```
-
-### Nucleotide code (ORF)
 
 ```{r isescan_table_orf_nc}
 isescan_data <- safe_get('isescan_results')
-if (!is.null(isescan_data)) {
+if (!is.null(isescan_data) && nrow(isescan_data) > 0) {
   isescan_data_adapted <- isescan_data |>
     select(
       contig_tag_fasta, 
@@ -1108,7 +1214,7 @@ if (!is.null(isescan_data)) {
       orf_nucleotide_code
     ) |>
     rename(
-      `Contig` = contig_tag_fasta,,
+      `Contig` = contig_tag_fasta,
       `ORF start position` = orf_start_position,
       `ORF end position` = orf_end_position,
       `ORF nucleotide code` = orf_nucleotide_code
@@ -1116,16 +1222,15 @@ if (!is.null(isescan_data)) {
   
   datatable(isescan_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(isescan_data)) {
+  cat('ISEScan analysis completed but no insertion sequence elements were identified.')
 } else {
-  cat('ISEScan results not available.')
+  cat('ISEScan was not run or did not produce results.')
 }
-```
-
-### Amino acid code (ORF)
 
 ```{r isescan_table_orf_aa}
 isescan_data <- safe_get('isescan_results')
-if (!is.null(isescan_data)) {
+if (!is.null(isescan_data) && nrow(isescan_data) > 0) {
   isescan_data_adapted <- isescan_data |>
     select(
       contig_tag_fasta, 
@@ -1134,7 +1239,7 @@ if (!is.null(isescan_data)) {
       orf_amino_acid_code
     ) |>
     rename(
-      `Contig` = contig_tag_fasta,,
+      `Contig` = contig_tag_fasta,
       `ORF start position` = orf_start_position,
       `ORF end position` = orf_end_position,
       `ORF amino acid code` = orf_amino_acid_code
@@ -1142,19 +1247,18 @@ if (!is.null(isescan_data)) {
   
   datatable(isescan_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(isescan_data)) {
+  cat('ISEScan analysis completed but no insertion sequence elements were identified.')
 } else {
-  cat('ISEScan results not available.')
+  cat('ISEScan was not run or did not produce results.')
 }
-```
-
-  Column {.tabset data-width=400}
 -------------------------------------
   
 ### Identified viral sequences by VirSorter2
   
 ```{r virsorter2_table}
 virsorter2_data <- safe_get('virsorter2_results')
-if (!is.null(virsorter2_data)) {
+if (!is.null(virsorter2_data) && nrow(virsorter2_data) > 0) {
   virsorter2_data_adapted <- virsorter2_data |>
     select(contig_tag_fasta, contig_tag_virsorter2, start_position, end_position, length_bp, score_virsorter2, max_score_group_virsorter2, hallmark_gene_count, viral, bacterial, archeal, eukaryotic, mixed, unaligned, source_file_virsorter2_tsv1, source_file_virsorter2_tsv2, source_file_virsorter2_fa) |>
     dplyr::rename(
@@ -1180,16 +1284,18 @@ if (!is.null(virsorter2_data)) {
   
   datatable(virsorter2_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(virsorter2_data)) {
+  cat('VirSorter2 analysis completed but no viral sequences were identified.')
 } else {
-  cat('VirSorter2 results not available.')
+  cat('VirSorter2 was not run or did not produce results.')
 }
 ```
 
-### Nucleotide code
+### Nucleotide code (VirSorter2)
 
 ```{r virsorter2_table_nc}
 virsorter2_data <- safe_get('virsorter2_results')
-if (!is.null(virsorter2_data)) {
+if (!is.null(virsorter2_data) && nrow(virsorter2_data) > 0) {
   virsorter2_data_adapted <- virsorter2_data |>
     select(contig_tag_fasta, start_position, end_position, nucleotide_code) |>
     rename(
@@ -1201,8 +1307,108 @@ if (!is.null(virsorter2_data)) {
   
   datatable(virsorter2_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(virsorter2_data)) {
+  cat('VirSorter2 analysis completed but no viral sequences were identified.')
 } else {
-  cat('VirSorter2 results not available.')
+  cat('VirSorter2 was not run or did not produce results.')
+}
+```
+
+### Identified viral sequences by geNomad
+
+```{r genomad_virus_table}
+genomad_virus_data <- safe_get('genomad_virus_results')
+
+if (!is.null(genomad_virus_data) && nrow(genomad_virus_data) > 0) {
+  genomad_virus_adapted <- genomad_virus_data |>
+    select(
+      contig_tag_fasta,
+      contig_tag_genomad,
+      coordinates_genomad,
+      length_bp,
+      topology_genomad,
+      n_genes_genomad,
+      virus_score_genomad,
+      fdr_genomad,
+      n_hallmarks_genomad,
+      marker_enrichment_genomad,
+      taxonomy_genomad
+    ) |>
+    rename(
+      `Contig` = contig_tag_fasta,
+      `Virus/Provirus ID` = contig_tag_genomad,
+      `Coordinates` = coordinates_genomad,
+      `Length (bp)` = length_bp,
+      `Topology` = topology_genomad,
+      `Number of genes` = n_genes_genomad,
+      `Virus score` = virus_score_genomad,
+      `FDR` = fdr_genomad,
+      `Hallmarks` = n_hallmarks_genomad,
+      `Marker enrichment` = marker_enrichment_genomad,
+      `Taxonomy` = taxonomy_genomad
+    )
+  
+  datatable(genomad_virus_adapted,
+            options = list(pageLength = 10))
+} else if (!is.null(genomad_virus_data)) {
+  cat('geNomad virus analysis completed but no viral sequences were identified.')
+} else {
+  cat('geNomad was not run or did not produce virus results.')
+}
+```
+
+### Nucleotide code (geNomad)
+
+```{r genomad_virus_table_nc}
+genomad_virus_data <- safe_get('genomad_virus_results')
+
+if (!is.null(genomad_virus_data) && nrow(genomad_virus_data) > 0) {
+  # Check if gene-level data exists
+  if ('gene_id_genomad' %in% colnames(genomad_virus_data)) {
+    genomad_virus_sequences <- genomad_virus_data |>
+      select(
+        contig_tag_genomad,
+        gene_id_genomad,
+        start_position,
+        end_position,
+        strand_genomad,
+        annotation_description_genomad
+      ) |>
+      rename(
+        `Virus/Provirus ID` = contig_tag_genomad,
+        `Gene ID` = gene_id_genomad,
+        `Start position` = start_position,
+        `End position` = end_position,
+        `Strand` = strand_genomad,
+        `Annotation` = annotation_description_genomad
+      )
+    
+    datatable(genomad_virus_sequences,
+              options = list(pageLength = 10))
+  } else {
+    genomad_virus_sequences <- genomad_virus_data |>
+      select(
+        contig_tag_genomad,
+        coordinates_genomad,
+        length_bp,
+        virus_score_genomad,
+        taxonomy_genomad
+      ) |>
+      rename(
+        `Virus/Provirus ID` = contig_tag_genomad,
+        `Coordinates` = coordinates_genomad,
+        `Length (bp)` = length_bp,
+        `Virus score` = virus_score_genomad,
+        `Taxonomy` = taxonomy_genomad
+      )
+    
+    datatable(genomad_virus_sequences,
+              options = list(pageLength = 10))
+  }
+} else if (!is.null(genomad_virus_data)) {
+  cat('geNomad virus analysis completed but no viral sequences were identified.')
+} else {
+  cat('geNomad was not run or did not produce virus results.')
 }
 ```
 
@@ -1219,7 +1425,7 @@ Column {.tabset data-width=400}
 dbcan3_data <- safe_get('dbcan3_results')
 annotation_data <- safe_get('annotation_results_integrated')
 
-if (!is.null(dbcan3_data)) {
+if (!is.null(dbcan3_data) && nrow(dbcan3_data) > 0) {
   merged <- FALSE
   if (!is.null(annotation_data)) {
       annotation_data <- annotation_data %>%
@@ -1229,25 +1435,22 @@ if (!is.null(dbcan3_data)) {
 
       dbcan3_data_adapted <- dbcan3_data %>%
         arrange(start_position) %>%
-        select(CAZyme_gene_clusters_dbcan3, gene_type_dbcan3, protein_family_dbcan3, start_position, end_position, strand, contig_tag_fasta, nucleotide_code, source_file_dbcan3_out, source_file_dbcan3_txt) |>
-        mutate(
-          start_position = as.numeric(start_position),
-          end_position = as.numeric(end_position)
-        ) %>%
+        select(CAZyme_gene_clusters_dbcan3, gene_type_dbcan3, protein_family_dbcan3, start_position, end_position, strand, contig_tag_fasta, nucleotide_code, source_file_dbcan3_out, source_file_dbcan3_txt) %>%
         left_join(annotation_data, by = c('start_position', 'end_position', 'strand', 'nucleotide_code', 'contig_tag_fasta'))
-      
+
       merged <- TRUE
   }
-  
+
   if (!merged) {
     dbcan3_data_adapted <- dbcan3_data %>%
       arrange(start_position) %>%
-      select(CAZyme_gene_clusters_dbcan3, gene_type_dbcan3, protein_family_dbcan3, start_position, end_position, strand, source_file_dbcan3_out, source_file_dbcan3_txt)
+      select(CAZyme_gene_clusters_dbcan3, gene_type_dbcan3, protein_family_dbcan3, start_position, end_position, strand, contig_tag_fasta, source_file_dbcan3_out, source_file_dbcan3_txt)
   }
 
   # Rename columns based on whether merge occurred or not
   if (merged) {
     dbcan3_data_adapted <- dbcan3_data_adapted %>%
+      mutate(length_bp = coalesce(as.numeric(length_bp), as.numeric(end_position) - as.numeric(start_position) + 1)) %>%
       select(CAZyme_gene_clusters_dbcan3, gene_SC, gene_product_SC, gene_type_dbcan3, protein_family_dbcan3, start_position, end_position, length_bp, strand, contig_tag_fasta, COG_number_SC, EC_number_SC_best, source_file_dbcan3_out, source_file_dbcan3_txt) %>%
       rename(
         `CAZyme gene cluster tag` = CAZyme_gene_clusters_dbcan3,
@@ -1267,8 +1470,7 @@ if (!is.null(dbcan3_data)) {
       )
   } else {
     dbcan3_data_adapted <- dbcan3_data_adapted %>%
-      select(CAZyme_gene_clusters_dbcan3, gene_type_dbcan3, protein_family_dbcan3, start_position, end_position, length_bp, strand, contig_tag_fasta, source_file_dbcan3_out, source_file_dbcan3_txt) %>%
-      mutate(length_bp = end_position - start_position + 1) %>%
+      mutate(length_bp = as.numeric(end_position) - as.numeric(start_position) + 1) %>%
       rename(
         `CAZyme gene cluster tag` = CAZyme_gene_clusters_dbcan3,
         `Gene type` = gene_type_dbcan3,
@@ -1285,22 +1487,20 @@ if (!is.null(dbcan3_data)) {
 
   datatable(dbcan3_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(dbcan3_data)) {
+  cat('dbCAN3 analysis completed but no CAZymes were identified.')
 } else {
-  cat('dbCAN3 results not available.')
+  cat('dbCAN3 was not run or did not produce results.')
 }
 ```
 
 ### Nucleotide and amino acid code 
 
 ```{r dbcan3_table_nc}
-if (!is.null(dbcan3_data)) {
+if (!is.null(dbcan3_data) && nrow(dbcan3_data) > 0) {
   dbcan3_data_adapted <- dbcan3_data |>
     arrange(start_position) |>
-    select(contig_tag_fasta, CAZyme_gene_clusters_dbcan3, gene_type_dbcan3, protein_family_dbcan3, start_position, end_position, strand, nucleotide_code, source_file_dbcan3_out, source_file_dbcan3_txt) |>
-    mutate(
-      start_position = as.numeric(start_position),
-      end_position = as.numeric(end_position)
-    )
+    select(contig_tag_fasta, CAZyme_gene_clusters_dbcan3, gene_type_dbcan3, protein_family_dbcan3, start_position, end_position, strand, nucleotide_code, source_file_dbcan3_out, source_file_dbcan3_txt)
 
   merged <- FALSE
   if (!is.null(annotation_data)) {
@@ -1314,9 +1514,8 @@ if (!is.null(dbcan3_data)) {
 
       dbcan3_data_adapted <- dbcan3_data_adapted |>
         left_join(annotation_data_adapted, by = c('start_position', 'end_position', 'strand', 'nucleotide_code', 'contig_tag_fasta'))
-      
+
       merged <- TRUE
-    
   }
 
   if (merged) {
@@ -1355,8 +1554,10 @@ if (!is.null(dbcan3_data)) {
 
   datatable(dbcan3_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(dbcan3_data)) {
+  cat('dbCAN3 analysis completed but no CAZymes were identified.')
 } else {
-  cat('dbCAN3 nucleotide code not available.')
+  cat('dbCAN3 was not run or did not produce results.')
 }
 ```
 
@@ -1367,11 +1568,11 @@ Column {.tabset data-width=400}
 
 ```{r resfinder_amr_profile_table}
 resfinder_profile <- safe_get('resfinder_AMR_profile')
-if (!is.null(resfinder_profile)) {
+if (!is.null(resfinder_profile) && nrow(resfinder_profile) > 0) {
   resfinder_profile_adapted <- resfinder_profile %>%
   mutate(genomic_AMR_phenotype_resfinder = factor(
     genomic_AMR_phenotype_resfinder,
-    levels = c(\"Resistant\", setdiff(unique(genomic_AMR_phenotype_resfinder), \"Resistant\"))
+    levels = c('Resistant', setdiff(unique(genomic_AMR_phenotype_resfinder), 'Resistant'))
     )) |>
     arrange(genomic_AMR_phenotype_resfinder) |>
     select(genomic_AMR_phenotype_resfinder, antimicrobial_agent_resfinder, antimicrobial_agent_class_resfinder, AMR_phenotype_genetic_background_resfinder, source_file_AMR_profile_resfinder) |>
@@ -1384,8 +1585,10 @@ if (!is.null(resfinder_profile)) {
     )
   datatable(resfinder_profile_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(resfinder_profile)) {
+  cat('ResFinder AMR profiling completed but no resistance phenotypes were identified.')
 } else {
-  cat('AMR phenotype profile not available.')
+  cat('ResFinder AMR profiling was not run or did not produce results.')
 }
 ```
 
@@ -1393,7 +1596,7 @@ if (!is.null(resfinder_profile)) {
 
 ```{r resfinder_table}
 resfinder_data <- safe_get('resfinder_results')
-if (!is.null(resfinder_data)) {
+if (!is.null(resfinder_data) && nrow(resfinder_data) > 0) {
   resfinder_data_adapted <- resfinder_data |>
     select(AMR_gene_resfinder, AMR_phenotype_resfinder, start_position, end_position, nucleotide_identity_resfinder, percentage_length_of_reference_sequence_resfinder, contig_tag_fasta, source_file_results_resfinder) |>
     mutate(percentage_length_of_reference_sequence_resfinder = round(percentage_length_of_reference_sequence_resfinder, 2)) %>%
@@ -1410,8 +1613,10 @@ if (!is.null(resfinder_data)) {
 
   datatable(resfinder_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(resfinder_data)) {
+  cat('ResFinder analysis completed but no AMR genes were identified.')
 } else {
-  cat('ResFinder results not available.')
+  cat('ResFinder was not run or did not produce results.')
 }
 ```
 
@@ -1421,7 +1626,7 @@ if (!is.null(resfinder_data)) {
 resfinder_data <- safe_get('resfinder_results')
 annotation_data <- safe_get('annotation_results_integrated')
 
-if (!is.null(resfinder_data) & !is.null(annotation_data)) {
+if (!is.null(resfinder_data) && nrow(resfinder_data) > 0 && !is.null(annotation_data)) {
   resfinder_data_adapted <- resfinder_data |>
     arrange(start_position) |>
     select(AMR_gene_resfinder, AMR_phenotype_resfinder, start_position, end_position)
@@ -1455,7 +1660,11 @@ if (!is.null(resfinder_data) & !is.null(annotation_data)) {
   datatable(resfinder_data_adapted,
             options = list(pageLength = 10))
 } else {
-  cat('ResFinder nucleotide and amino acid codes not available.')
+  if (is.null(resfinder_data) || nrow(resfinder_data) == 0) {
+    cat('No AMR genes identified by ResFinder, or ResFinder was not included in this analysis.')
+  } else {
+    cat('Integrated annotation data not available for sequence display.')
+  }
 }
 ```
 
@@ -1467,7 +1676,7 @@ Column {.tabset data-width=400}
 ```{r amrfinderplus_table}
 amrfinder_data <- safe_get('amrfinderplus_results')
 
-if (!is.null(amrfinder_data)) {
+if (!is.null(amrfinder_data) && nrow(amrfinder_data) > 0) {
   amrfinder_data_adapted <- amrfinder_data |>
     select(
       gene_symbol,
@@ -1502,8 +1711,10 @@ if (!is.null(amrfinder_data)) {
     
   datatable(amrfinder_data_adapted,
             options = list(pageLength = 10))
+} else if (!is.null(amrfinder_data)) {
+  cat('AMRFinderPlus analysis completed but no AMR genes were identified.')
 } else {
-  cat('AMRFinderPlus results not available.')
+  cat('AMRFinderPlus was not run or did not produce results.')
 }
 ```
 
@@ -1512,7 +1723,7 @@ if (!is.null(amrfinder_data)) {
 ```{r amrfinderplus_sequences}
 amrfinder_data <- safe_get('amrfinderplus_results')
 
-if (!is.null(amrfinder_data)) {
+if (!is.null(amrfinder_data) && nrow(amrfinder_data) > 0) {
   amrfinder_sequences <- amrfinder_data |>
     arrange(start_position) |>
     select(
@@ -1532,8 +1743,10 @@ if (!is.null(amrfinder_data)) {
     
   datatable(amrfinder_sequences,
             options = list(pageLength = 10))
+} else if (!is.null(amrfinder_data)) {
+  cat('AMRFinderPlus analysis completed but no AMR genes were identified.')
 } else {
-  cat('AMRFinderPlus sequence data not available.')
+  cat('AMRFinderPlus was not run or did not produce results.')
 }
 ```
 
@@ -1543,15 +1756,37 @@ Genome Visualisation
 Column {data-width=900}
 -------------------------------------
   
-### Integrated genome visualisation
+### Genome visualisation
   
 ```{r circlize_plot, fig.width=8, fig.height=8, dpi=300}
 
 # Check if fasta_file is available (it's obligatory)
 fasta_file <- safe_get('selected_assembly_results')
 if (!is.null(fasta_file)) {
+  tryCatch({
   
-  # Prepare circlize genome data
+  # Get plasmid contigs from PlasmidFinder and geNomad
+  plasmidfinder_data <- safe_get('plasmidfinder_results')
+  genomad_plasmid_data <- safe_get('genomad_plasmid_results')
+  
+  # Collect plasmid contig names
+  plasmid_contigs <- c()
+  if (!is.null(plasmidfinder_data) && 'contig_tag_fasta' %in% colnames(plasmidfinder_data)) {
+    pf_plasmids <- plasmidfinder_data %>%
+      filter(hit_found_plasmidfinder != FALSE) %>%
+      pull(contig_tag_fasta) %>%
+      unique()
+    plasmid_contigs <- c(plasmid_contigs, pf_plasmids)
+  }
+  if (!is.null(genomad_plasmid_data) && 'contig_tag_fasta' %in% colnames(genomad_plasmid_data)) {
+    gn_plasmids <- genomad_plasmid_data %>%
+      pull(contig_tag_fasta) %>%
+      unique()
+    plasmid_contigs <- c(plasmid_contigs, gn_plasmids)
+  }
+  plasmid_contigs <- unique(plasmid_contigs)
+  
+  # Prepare circlize genome data with plasmid labels
   circlize_genome <- data.frame(
     contig_tag_fasta = fasta_file$contig_tag_fasta,
     start_position = 1,
@@ -1559,49 +1794,84 @@ if (!is.null(fasta_file)) {
     nucleid_acid_code = as.character(fasta_file$nucleotide_code)
   )
   
+  # Add plasmid label to contig names (for circlize plot display only)
+  circlize_genome$contig_tag_fasta <- sapply(circlize_genome$contig_tag_fasta, function(name) {
+    if (name %in% plasmid_contigs) {
+      paste0(name, ' (plasmid)')
+    } else {
+      name
+    }
+  })
+  
+  # Helper function to prepare circlize data from result data frames
+  # NOTE: Contig names should already be normalized (contig_1, contig_2, etc.) from the
+  # assembly polishing step. No post-hoc normalization needed.
   prepare_circlize_data <- function(data_name, required_cols) {
     data <- safe_get(data_name)
-    if (!is.null(data) && all(required_cols %in% colnames(data))) {
-      result <- data %>%
-        select(all_of(c('contig_tag_fasta', 'start_position', 'end_position', required_cols)))
+    if (!is.null(data) && nrow(data) > 0 && all(required_cols %in% colnames(data))) {
+      # Include strand in selection if it exists
+      cols_to_select <- c('contig_tag_fasta', 'start_position', 'end_position', required_cols)
+      if ('strand' %in% colnames(data) && !'strand' %in% cols_to_select) {
+        cols_to_select <- c(cols_to_select, 'strand')
+      }
       
-      # Check if the strand column exists and has valid values
-      if ('strand' %in% colnames(data)) {
-        result <- result %>% mutate(strand = data$strand)
+      result <- data %>%
+        select(all_of(cols_to_select))
+      
+      # Normalize strand values: convert NA, '.', '*', or empty strings to '?'
+      # GFF files use '.' for features without strand orientation (e.g., genomic islands)
+      if ('strand' %in% colnames(result)) {
+        result$strand <- sapply(result$strand, function(s) {
+          if (is.na(s) || s == '.' || s == '*' || s == '' || !s %in% c('+', '-')) {
+            return('?')
+          }
+          return(as.character(s))
+        })
       } else {
-        result <- result %>% mutate(strand = '?')  # Assign '?' if the strand column is missing
+        result$strand <- '?'
       }
       
       return(result)
     } else {
-      message(paste(data_name, 'not found or missing required columns.'))
+      message(paste(data_name, 'not found, empty, or missing required columns.'))
       return(NULL)
     }
   }
   
   prepare_circlize_data_isescan <- function(data_name, required_cols) {
     data <- safe_get(data_name)
-    if (!is.null(data) && all(required_cols %in% colnames(data))) {
-      result <- data %>%
-        select(all_of(c('contig_tag_fasta', 'insertion_sequence_start_position', 'insertion_sequence_end_position', required_cols))) %>%
-        mutate(
-          start_position = insertion_sequence_start_position,
-          end_position = insertion_sequence_end_position,
-        ) %>%
-        select(all_of(c('contig_tag_fasta', 'start_position', 'end_position', required_cols)))
-      
-      # Fixed strand handling
-      if ('strand' %in% colnames(data)) {
-        result <- result %>% 
-          # Replace NA values with '?' in the strand column
-          mutate(strand = ifelse(is.na(data$strand), '?', as.character(data$strand)))
-      } else {
-        result <- result %>% mutate(strand = '?')
+    if (!is.null(data) && nrow(data) > 0 && all(required_cols %in% colnames(data))) {
+      # Include strand in selection if it exists
+      cols_to_select <- c('contig_tag_fasta', 'insertion_sequence_start_position', 'insertion_sequence_end_position', required_cols)
+      if ('strand' %in% colnames(data) && !'strand' %in% cols_to_select) {
+        cols_to_select <- c(cols_to_select, 'strand')
       }
+      
+      result <- data %>%
+        select(all_of(cols_to_select))
+      
+      # Rename position columns
+      result$start_position <- result$insertion_sequence_start_position
+      result$end_position <- result$insertion_sequence_end_position
+      
+      # Normalize strand values: convert NA, '.', '*', or empty strings to '?'
+      if ('strand' %in% colnames(result)) {
+        result$strand <- sapply(result$strand, function(s) {
+          if (is.na(s) || s == '.' || s == '*' || s == '' || !s %in% c('+', '-')) {
+            return('?')
+          }
+          return(as.character(s))
+        })
+      } else {
+        result$strand <- '?'
+      }
+      
+      # Select final columns
+      result <- result %>% select(contig_tag_fasta, start_position, end_position, strand)
       
       return(result)
     } else {
-      message(paste(data_name, 'not found or missing required columns.'))
+      message(paste(data_name, 'not found, empty, or missing required columns.'))
       return(NULL)
     }
   }
@@ -1619,17 +1889,69 @@ if (!is.null(fasta_file)) {
   # Combine RGI and Resfinder results for AMR visualization
   circlize_AMR <- bind_rows(circlize_amrfinderplus, circlize_resfinder)
   
+  # Helper function to add plasmid labels to contig names
+  add_plasmid_labels <- function(df) {
+    if (!is.null(df) && nrow(df) > 0 && 'contig_tag_fasta' %in% colnames(df)) {
+      df$contig_tag_fasta <- sapply(df$contig_tag_fasta, function(name) {
+        if (name %in% plasmid_contigs) {
+          paste0(name, ' (plasmid)')
+        } else {
+          name
+        }
+      })
+    }
+    return(df)
+  }
+  
+  # Apply plasmid labels to all circlize data frames
+  circlize_annotation <- add_plasmid_labels(circlize_annotation)
+  circlize_islandpath <- add_plasmid_labels(circlize_islandpath)
+  circlize_isescan <- add_plasmid_labels(circlize_isescan)
+  circlize_virsorter2 <- add_plasmid_labels(circlize_virsorter2)
+  circlize_dbcan3 <- add_plasmid_labels(circlize_dbcan3)
+  circlize_AMR <- add_plasmid_labels(circlize_AMR)
+  
   # Circlize plot function
   circlize_plot <- function() {
     circos.clear()
     circos.par(start.degree = 90, cell.padding = c(0, 0, 0, 0))
     circos.genomicInitialize(circlize_genome)
     
+    # Plot sections with support for circular chromosome features (start > end)
+    # When a feature wraps around the origin (start > end), split into two rectangles
     plot_sections <- function(genes, y_start, y_end, color) {
       if (!is.null(genes) && nrow(genes) > 0) {
-        starts <- genes$start_position
-        ends <- genes$end_position
-        circos.rect(starts, rep(y_start, length(starts)), ends, rep(y_end, length(ends)), col = color, border = NA)
+        # Get sector boundaries for handling circular features
+        sector_xlim <- CELL_META$xlim
+        sector_start <- sector_xlim[1]
+        sector_end <- sector_xlim[2]
+        
+        # Separate normal features (start <= end) from circular features (start > end)
+        normal_idx <- genes$start_position <= genes$end_position
+        circular_idx <- genes$start_position > genes$end_position
+        
+        # Plot normal features
+        if (any(normal_idx)) {
+          normal_genes <- genes[normal_idx, ]
+          circos.rect(normal_genes$start_position, rep(y_start, nrow(normal_genes)), 
+                      normal_genes$end_position, rep(y_end, nrow(normal_genes)), 
+                      col = color, border = NA)
+        }
+        
+        # Plot circular features as two rectangles (start to sector_end, sector_start to end)
+        if (any(circular_idx)) {
+          circular_genes <- genes[circular_idx, ]
+          for (i in seq_len(nrow(circular_genes))) {
+            # First part: from start to end of sector (chromosome end)
+            circos.rect(circular_genes$start_position[i], y_start, 
+                        sector_end, y_end, 
+                        col = color, border = NA)
+            # Second part: from start of sector (chromosome start) to end position
+            circos.rect(sector_start, y_start, 
+                        circular_genes$end_position[i], y_end, 
+                        col = color, border = NA)
+          }
+        }
       }
     }
     
@@ -1674,6 +1996,9 @@ if (!is.null(fasta_file)) {
   # Generate the plot
   circlize_plot()
   
+  }, error = function(e) {
+    cat('Genome visualisation could not be rendered. Error:', conditionMessage(e))
+  })
 } else {
   cat('Fasta file data not available.')
 }
@@ -1688,6 +2013,7 @@ Column {data-width=300}
 ```{r circlize_plot_legend, fig.width=2, fig.height=6, dpi=300}
 fasta_file <- safe_get('selected_assembly_results')
 if (!is.null(fasta_file)) {
+  tryCatch({
   
   plot_legend <- function() {
     # Initialize an empty list to store legends
@@ -1732,7 +2058,7 @@ if (!is.null(fasta_file)) {
       legend_list <- c(legend_list, list(
         Legend(at = c('+ strand', '- strand', 'unknown strand'), type = 'points', 
                legend_gp = gpar(col = c('#2B5C8A', '#9E3D22', '#4D4D4D')), 
-               title_position = 'topleft', title = 'Viral sequences'))
+               title_position = 'topleft', title = 'Viral sequences (VirSorter2)'))
       )
     }
     
@@ -1747,7 +2073,7 @@ if (!is.null(fasta_file)) {
       legend_list <- c(legend_list, list(
         Legend(at = c('+ strand', '- strand', 'unknown strand'), type = 'points', 
                legend_gp = gpar(col = c('#2B5C8A', '#9E3D22', '#4D4D4D')), 
-               title_position = 'topleft', title = 'AMR'))
+               title_position = 'topleft', title = 'AMR (AMRFinderPlus)'))
       )
     }
     
@@ -1775,6 +2101,9 @@ if (!is.null(fasta_file)) {
   # Call the function to plot the legend
   plot_legend()
   
+  }, error = function(e) {
+    cat('Genome visualisation legend could not be rendered. Error:', conditionMessage(e))
+  })
 } else {
   cat('Fasta file data not available.')
 }
@@ -1801,7 +2130,8 @@ main <- function() {
   tryCatch({
     rmarkdown::render(rmd_file, 
                       output_format = "flexdashboard::flex_dashboard", 
-                      output_file = html_file,
+                      output_file = basename(html_file),
+                      output_dir = output_dir,
                       params = list(rdata_file = rdata_file))
     cat("Interactive Markdown summary has been generated as '", basename(html_file), "'\n", sep = "")
   }, error = function(e) {

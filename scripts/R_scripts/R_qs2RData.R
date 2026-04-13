@@ -19,7 +19,9 @@ option_list <- list(
   make_option(c("-o", "--output_dir"), type = "character", default = ".", 
               help = "Directory to save RData object and RProject"),
   make_option(c("-s", "--sample_name"), type = "character", default = "default",
-              help = "Sample name to be included in output file names")
+              help = "Sample name to be included in output file names"),
+  make_option(c("-m", "--mapping_file"), type = "character", default = NULL,
+              help = "Path to contig name mapping TSV file (optional)")
 )
 
 # Parse command line options
@@ -70,12 +72,15 @@ qs_files <- c(
   "gtdbtk_25_tree_plot.qs",
   "dbcan3_results.qs",
   "plasmidfinder_results.qs",
+  "genomad_plasmid_results.qs",
+  "genomad_virus_results.qs",
   "amrfinderplus_results.qs",
   "resfinder_results.qs",
   "islandpath_results.qs",
   "prokka_results.qs",
   "bakta_results.qs",
   "microbeannotator_results.qs",
+  "deepfri_results.qs",
   "resfinder_AMR_profile.qs",
   "virsorter2_results.qs",
   "isescan_results.qs"
@@ -104,6 +109,79 @@ for (file in qs_files) {
 if (!any(sapply(qs_files, function(f) exists(gsub(".qs", "", f), envir = .GlobalEnv)))) {
   cat("No .qs files were found or imported.\n")
   quit(save = "no", status = 0)
+}
+
+# Apply contig name mapping to all data frames with contig_tag_fasta column
+if (!is.null(opt$mapping_file) && file.exists(opt$mapping_file)) {
+  cat("INFO: Applying contig name mapping from", opt$mapping_file, "\n")
+  
+  contig_mapping <- read.delim(opt$mapping_file, stringsAsFactors = FALSE)
+  
+  if (nrow(contig_mapping) > 0) {
+    # Create lookup from original names (and stripped names) to normalized names
+    original_to_normalized <- setNames(
+      contig_mapping$normalized_name,
+      contig_mapping$original_name
+    )
+    
+    # Also create lookup from stripped names if available
+    if ("original_name_stripped" %in% colnames(contig_mapping)) {
+      stripped_to_normalized <- setNames(
+        contig_mapping$normalized_name,
+        contig_mapping$original_name_stripped
+      )
+    } else {
+      stripped_to_normalized <- character(0)
+    }
+    
+    # Helper function to strip polishing suffixes
+    strip_polishing_suffix <- function(name) {
+      name <- gsub(" (polypolish|medaka|racon|arrow)$", "", name)
+      name <- gsub("_(polypolish|medaka|racon|arrow)$", "", name)
+      return(name)
+    }
+    
+    # Helper function to map contig names in a data frame
+    map_contig_names <- function(df, df_name) {
+      if (!is.data.frame(df) || !"contig_tag_fasta" %in% colnames(df)) {
+        return(df)
+      }
+      
+      original_names <- df$contig_tag_fasta
+      df$contig_tag_fasta <- sapply(original_names, function(name) {
+        if (is.na(name)) return(NA_character_)
+        if (name %in% names(original_to_normalized)) {
+          return(unname(original_to_normalized[name]))
+        }
+        stripped_name <- strip_polishing_suffix(name)
+        if (length(stripped_to_normalized) > 0 && stripped_name %in% names(stripped_to_normalized)) {
+          return(unname(stripped_to_normalized[stripped_name]))
+        }
+        # Keep original if no match (already normalized or unknown)
+        return(name)
+      }, USE.NAMES = FALSE)
+      
+      # Report mapping
+      mapped_count <- sum(df$contig_tag_fasta %in% contig_mapping$normalized_name, na.rm = TRUE)
+      total_count <- sum(!is.na(original_names))
+      if (total_count > 0) {
+        cat(sprintf("  %s: mapped %d/%d contig names\n", df_name, mapped_count, total_count))
+      }
+      
+      return(df)
+    }
+    
+    # Apply mapping to all loaded data frames
+    for (var_name in ls(envir = .GlobalEnv)) {
+      obj <- get(var_name, envir = .GlobalEnv)
+      if (is.data.frame(obj) && "contig_tag_fasta" %in% colnames(obj)) {
+        updated_obj <- map_contig_names(obj, var_name)
+        assign(var_name, updated_obj, envir = .GlobalEnv)
+      }
+    }
+  }
+} else if (!is.null(opt$mapping_file)) {
+  cat("WARNING: Mapping file not found:", opt$mapping_file, "\n")
 }
 
 # Save imported data objects as RData object

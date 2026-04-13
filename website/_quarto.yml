@@ -1,0 +1,61 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "StrainCascade"
+  description: "Modular bacterial genome assembly & annotation pipeline for long-read sequencing data"
+  favicon: images/favicon.png
+  site-url: https://sbujordi.github.io/StrainCascade/docs/
+  repo-url: https://github.com/SBUJordi/StrainCascade
+  repo-actions: [issue, source]
+  page-navigation: true
+  back-to-top-navigation: true
+
+  navbar:
+    background: "#1a2a3a"
+    foreground: "#e0e0e0"
+    logo: images/straincascade_logo_white.png
+    title: false
+    left:
+      - text: "Home"
+        href: index.qmd
+      - text: "Installation"
+        href: installation.qmd
+      - text: "Quick Start"
+        href: quickstart.qmd
+      - text: "Modules"
+        href: modules.qmd
+      - text: "Usage"
+        href: usage.qmd
+      - text: "License"
+        href: license.qmd
+    right:
+      - text: "Overview"
+        href: https://sbujordi.github.io/StrainCascade/
+      - icon: github
+        href: https://github.com/SBUJordi/StrainCascade
+
+  sidebar: false
+
+  page-footer:
+    center: |
+      StrainCascade v2.0.0 · Developed by Sebastian B.U. Jordi et al.
+
+format:
+  html:
+    theme:
+      dark:
+        - darkly
+        - styles.css
+      light:
+        - flatly
+        - styles-light.css
+    theme-toggle: true
+    toc: true
+    toc-depth: 3
+    code-copy: true
+    code-overflow: wrap
+    highlight-style:
+      light: ayu-blue-light.theme
+      dark: ayu-blue-dark.theme

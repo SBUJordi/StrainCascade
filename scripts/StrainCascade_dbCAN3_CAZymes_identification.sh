@@ -64,31 +64,24 @@ if [[ -z "$ANALYSIS_ASSEMBLY_FILE" ]]; then
 fi
 log "$LOGS_DIR" "$LOG_NAME" "Using assembly file: $ANALYSIS_ASSEMBLY_FILE"
 
-# Define dbCAN3 parameters
+# Define dbCAN3 v5 parameters
+# v5 defaults match v4 defaults except --coverage_threshold_stp (v5=0.35, v4=0.3)
+# and --additional_genes (v5=TC only, v4=all). Explicitly set both.
 readonly DBCAN3_PARAMS=(
-    "--dia_eval 1e-102"
-    "--hmm_eval 1e-15"
-    "--hmm_cov 0.35"
-    "--tf_eval 1e-4"
-    "--tf_cov 0.35"
-    "--stp_eval 1e-4"
-    "--stp_cov 0.3"
-    "--cluster 1"
-    "--cgc_dis 2"
-    "--cgc_sig_genes all"
+    "--coverage_threshold_stp 0.3"
+    "--additional_genes TC"
+    "--additional_genes TF"
+    "--additional_genes STP"
+    "--num_null_gene 2"
 )
 
-# Construct dbCAN3 command
-readonly DBCAN3_CMD="run_dbcan \
-    /tmp/temp_input_assembly_dbCAN3.fasta \
-    prok \
-    --out_dir /mnt/output \
+# Construct dbCAN3 v5 command (easy_CGC chains annotation + GFF processing + CGC finding)
+readonly DBCAN3_CMD="run_dbcan easy_CGC \
+    --input_raw_data /tmp/temp_input_assembly_dbCAN3.fasta \
+    --mode prok \
+    --output_dir /mnt/output \
     --db_dir /mnt/dbcan3_db \
-    --dia_cpu $THREADS \
-    --hmm_cpu $THREADS \
-    --tf_cpu $THREADS \
-    --stp_cpu $THREADS \
-    --tools all \
+    --threads $THREADS \
     ${DBCAN3_PARAMS[*]}"
 
 # Run dbCAN3 analysis
@@ -104,10 +97,10 @@ apptainer exec \
              export TMPDIR=/tmp && \
              mkdir -p \$TMPDIR && \
              cp /mnt/input/$(basename "$ANALYSIS_ASSEMBLY_FILE") /tmp/temp_input_assembly_dbCAN3.fasta && \
-             $DBCAN3_CMD" 2>&1 | tee "$LOG_NAME"
+             $DBCAN3_CMD" 2>&1 | tee "$LOGS_DIR/${LOG_NAME}_dbcan3_run.log"
 
 # Check for analysis errors
-if grep -q "FileNotFoundError: \[Errno 2\] No such file or directory:" "$LOG_NAME"; then
+if grep -q "FileNotFoundError: \[Errno 2\] No such file or directory:" "$LOGS_DIR/${LOG_NAME}_dbcan3_run.log"; then
     log "$LOGS_DIR" "$LOG_NAME" "WARNING: No sequences passed filtering criteria. Consider adjusting parameters: ${DBCAN3_PARAMS[*]}"
     exit 0
 fi
@@ -115,9 +108,14 @@ fi
 # Process output files
 log "$LOGS_DIR" "$LOG_NAME" "Processing output files"
 
-# Rename output files
-mv "$DBCAN3_OUTPUT_DIR/overview.txt" "$DBCAN3_OUTPUT_DIR/overview_${SAMPLE_NAME}_CAZymes_dbcan3.txt"
-mv "$DBCAN3_OUTPUT_DIR/cgc_standard.out" "$DBCAN3_OUTPUT_DIR/cgc_standard_${SAMPLE_NAME}_CAZymes_dbcan3.out"
+# Rename output files (v5 produces overview.tsv, cgc_standard_out.tsv, and uniInput.gff)
+mv "$DBCAN3_OUTPUT_DIR/overview.tsv" "$DBCAN3_OUTPUT_DIR/overview_${SAMPLE_NAME}_CAZymes_dbcan3.txt"
+mv "$DBCAN3_OUTPUT_DIR/cgc_standard_out.tsv" "$DBCAN3_OUTPUT_DIR/cgc_standard_${SAMPLE_NAME}_CAZymes_dbcan3.out"
+
+# Rename prodigal GFF (provides positional data for all predicted proteins)
+if [[ -f "$DBCAN3_OUTPUT_DIR/uniInput.gff" ]]; then
+    mv "$DBCAN3_OUTPUT_DIR/uniInput.gff" "$DBCAN3_OUTPUT_DIR/prodigal_${SAMPLE_NAME}_CAZymes_dbcan3.gff"
+fi
 
 # Copy results to functional analysis directory
 readonly OUTPUT_FILES=$(find "$DBCAN3_OUTPUT_DIR" -mindepth 1 -name "*CAZymes_dbcan3*" -type f)
@@ -133,11 +131,21 @@ fi
 # Locate required files for R processing
 readonly OUT_FILE=$(find "$FUNCTIONAL_ANALYSIS_DIR" -name '*dbcan3.out' -print -quit)
 readonly TXT_FILE=$(find "$FUNCTIONAL_ANALYSIS_DIR" -name '*_dbcan3.txt' -print -quit)
+readonly GFF_FILE=$(find "$FUNCTIONAL_ANALYSIS_DIR" -name '*dbcan3.gff' -print -quit)
 
 # Validate R input files
 if [[ -z "$OUT_FILE" || -z "$TXT_FILE" ]]; then
     log "$LOGS_DIR" "$LOG_NAME" "Error: Missing required files for R processing"
     exit 1
+fi
+
+# Build optional GFF argument for R
+GFF_ARG=""
+if [[ -n "$GFF_FILE" ]]; then
+    GFF_ARG="--gff_file /mnt/input/$(basename "$GFF_FILE")"
+    log "$LOGS_DIR" "$LOG_NAME" "Using prodigal GFF for positional data: $(basename "$GFF_FILE")"
+else
+    log "$LOGS_DIR" "$LOG_NAME" "Warning: Prodigal GFF not found. Positional data limited to CGC members."
 fi
 
 # Process results with R
@@ -153,6 +161,7 @@ apptainer exec \
     --output_dir "/mnt/output" \
     --out_file "/mnt/input/$(basename "$OUT_FILE")" \
     --txt_file "/mnt/input/$(basename "$TXT_FILE")" \
+    $GFF_ARG \
     --fasta "/mnt/input_fasta/$(basename "$ANALYSIS_ASSEMBLY_FILE")" \
     --version "$VERSION" || {
     log "$LOGS_DIR" "$LOG_NAME" "Error: R processing failed"

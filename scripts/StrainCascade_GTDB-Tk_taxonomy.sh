@@ -146,33 +146,40 @@ fi
 # Clean up
 rm -rf "$GTDBTK_INPUT_DIR"
 
-# Process results with R
-tree_file=$(find "$TAXONOMIC_CLASS_DIR" -name '*gtdbtk.bac120.classify*' -print -quit)
-tsv_file=$(find "$TAXONOMIC_CLASS_DIR" -name '*gtdbtk.bac120.summary.tsv' -print -quit)
+# Process results with R (handle bacteria 'bac120' and archaea 'ar53')
+processed_any=0
+for domain in bac120 ar53; do
+    tree_file=$(find "$TAXONOMIC_CLASS_DIR" -name "*gtdbtk.${domain}.classify*" -print -quit)
+    tsv_file=$(find "$TAXONOMIC_CLASS_DIR" -name "*gtdbtk.${domain}.summary.tsv" -print -quit)
 
-if [[ -n "$tree_file" && -n "$tsv_file" ]]; then
-    
-    # Log R processing configuration
-    log "$LOGS_DIR" "$LOG_NAME" "Processing GTDB-Tk taxonomy results with R"
+    if [[ -n "$tree_file" && -n "$tsv_file" ]]; then
+        processed_any=1
+        # Log R processing configuration
+        log "$LOGS_DIR" "$LOG_NAME" "Processing GTDB-Tk ${domain} taxonomy results with R"
 
-    apptainer exec \
-        --bind "$R_SCRIPT_DIR:/mnt/r_script_dir" \
-        --bind "$TAXONOMIC_CLASS_DIR:/mnt/input_gtdbtk" \
-        --bind "$QS_FILES_DIR:/mnt/output" \
-        --bind "$RESULTS_INTEGRATION_DIR:/mnt/output2" \
-        "$r_sif" \
-        Rscript "/mnt/r_script_dir/R_process_gtdbtk_taxonomy.R" \
-        --output_dir "/mnt/output" \
-        --output_dir2 "/mnt/output2" \
-        --tree "/mnt/input_gtdbtk/$(basename "$tree_file")" \
-        --tsv "/mnt/input_gtdbtk/$(basename "$tsv_file")" \
-        --sample_name "$SAMPLE_NAME" \
-        --version "$VERSION" || {
-        log "$LOGS_DIR" "$LOG_NAME" "Error: R processing failed"
-        exit 1
-    }
-else
-    log "$LOGS_DIR" "$LOG_NAME" "Warning: Missing required files for R processing"
+        apptainer exec \
+            --bind "$R_SCRIPT_DIR:/mnt/r_script_dir" \
+            --bind "$TAXONOMIC_CLASS_DIR:/mnt/input_gtdbtk" \
+            --bind "$QS_FILES_DIR:/mnt/output" \
+            --bind "$RESULTS_INTEGRATION_DIR:/mnt/output2" \
+            "$r_sif" \
+            Rscript "/mnt/r_script_dir/R_process_gtdbtk_taxonomy.R" \
+            --output_dir "/mnt/output" \
+            --output_dir2 "/mnt/output2" \
+            --tree "/mnt/input_gtdbtk/$(basename "$tree_file")" \
+            --tsv "/mnt/input_gtdbtk/$(basename "$tsv_file")" \
+            --sample_name "$SAMPLE_NAME" \
+            --version "$VERSION" || {
+            log "$LOGS_DIR" "$LOG_NAME" "Error: R processing failed for ${domain}"
+            exit 1
+        }
+    else
+        log "$LOGS_DIR" "$LOG_NAME" "No ${domain} files found; skipping ${domain} R processing"
+    fi
+done
+
+if [[ $processed_any -eq 0 ]]; then
+    log "$LOGS_DIR" "$LOG_NAME" "Warning: Missing required files for R processing (no bac120 or ar53 outputs found)"
 fi
 
 log "$LOGS_DIR" "$LOG_NAME" "GTDB-Tk taxonomy analysis completed successfully"

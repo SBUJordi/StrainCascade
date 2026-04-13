@@ -122,17 +122,25 @@ import_fasta_file <- function(fasta_file) {
 
 # Function to extract nucleotide sequence
 extract_nucleotide_sequence <- function(fasta_data, contig, start, end, strand) {
-  contig <- as.character(contig)  # Ensure character type because LJA creates numeric contig tags
-  names(fasta_data) <- as.character(names(fasta_data))
-  
-  if (contig %in% names(fasta_data)) {
-    seq <- as.character(subseq(fasta_data[[contig]], start, end))
-    if (strand == "-") {
-      seq <- as.character(reverseComplement(DNAString(seq)))  # Efficient reverse complement
+  tryCatch({
+    contig <- as.character(contig)  # Ensure character type because LJA creates numeric contig tags
+    if (is.na(contig) || is.na(start) || is.na(end) || is.na(strand)) {
+      return(NA_character_)
     }
-    return(seq)
-  }
-  return(NA)
+    names(fasta_data) <- as.character(names(fasta_data))
+    
+    if (contig %in% names(fasta_data)) {
+      seq <- as.character(subseq(fasta_data[[contig]], start, end))
+      if (strand == "-") {
+        seq <- as.character(reverseComplement(DNAString(seq)))  # Efficient reverse complement
+      }
+      return(seq)
+    }
+    return(NA_character_)
+  }, error = function(e) {
+    warning(paste("Error extracting nucleotide sequence for contig", contig, ":", e$message))
+    return(NA_character_)
+  })
 }
 
 
