@@ -8,6 +8,7 @@ website:
   favicon: images/favicon.png
   site-url: https://sbujordi.github.io/StrainCascade/docs/
   repo-url: https://github.com/SBUJordi/StrainCascade
+  repo-subdir: website
   repo-actions: [issue, source]
   page-navigation: true
   back-to-top-navigation: true
