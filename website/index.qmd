@@ -124,4 +124,4 @@ See the [Quick Start](quickstart.qmd) and [Installation](installation.qmd) pages
 
 If you use StrainCascade in your research, please cite:
 
-> Jordi SBU et al. StrainCascade: A modular pipeline for comprehensive bacterial genome assembly and annotation from long-read sequencing data. *[Journal]* (2025). [DOI]
+> Jordi SBU, Baertschi I, Li J, Fasel N, Misselwitz B, Yilmaz B. StrainCascade: An automated, modular workflow for high-throughput long-read bacterial genome reconstruction and characterization. *bioRxiv* (2026). [doi:10.64898/2026.02.04.698786](https://doi.org/10.64898/2026.02.04.698786)
