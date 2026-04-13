@@ -5,7 +5,7 @@ title-block-banner: false
 ---
 
 ::: {style="text-align: center; margin: 2em 0 1.5em;"}
-![](images/straincascade_logo_white.png){.darkmode width="100%" fig-alt="StrainCascade"}
+![](images/straincascade_logo_blue.png){.darkmode width="100%" fig-alt="StrainCascade"}
 ![](images/straincascade_logo_colour_whitebackground.png){.lightmode width="100%" fig-alt="StrainCascade"}
 :::
 
