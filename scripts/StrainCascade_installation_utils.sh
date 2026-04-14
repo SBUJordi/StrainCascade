@@ -233,11 +233,13 @@ add_scripts_to_path() {
     }
 
     # Check if a non-base Conda environment is active
-    if [[ -n "$CONDA_DEFAULT_ENV" && "$CONDA_DEFAULT_ENV" != "base" ]]; then
+    if [[ -n "${CONDA_DEFAULT_ENV:-}" && "${CONDA_DEFAULT_ENV:-}" != "base" ]]; then
         echo "Conda environment '$CONDA_DEFAULT_ENV' is active."
         
         # Get the path to the active Conda environment
-        conda_env_path=$(conda info --envs | grep '*' | awk '{print $NF}')
+        # Use CONDA_PREFIX (set by conda activate) which is reliable across conda versions,
+        # rather than parsing 'conda info --envs' output which varies by version.
+        conda_env_path="${CONDA_PREFIX:?CONDA_PREFIX is not set - cannot configure PATH for conda environment}"
         
         # Add the script directory to the Conda environment's activation script
         activate_script="$conda_env_path/etc/conda/activate.d/env_vars.sh"
