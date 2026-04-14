@@ -30,6 +30,10 @@ check_required_tools
 check_apptainer_installation
 check_existing_installations
 
+# Redirect Apptainer temp/cache to the installation filesystem (avoids /tmp exhaustion on HPC)
+setup_apptainer_env
+trap 'cleanup_apptainer_env' EXIT
+
 # Full or individual component installation
 read -p "Do you want to do a full installation of StrainCascade? This will overwrite any existing installations. (y/n) " full_install_choice
 case "$full_install_choice" in

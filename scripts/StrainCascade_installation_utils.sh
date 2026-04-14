@@ -32,9 +32,12 @@ check_main_directory() {
 }
 
 # Function to check disk space (POSIX-compatible, works across Linux distributions)
+# Measures the parent directory (../) where images and databases are installed,
+# not the scripts directory, to correctly reflect the target filesystem.
 check_disk_space() {
+    local install_root="$(cd ".." && pwd)"
     local available_kb
-    available_kb=$(df -P . 2>/dev/null | awk 'NR==2 {print $4}')
+    available_kb=$(df -P "$install_root" 2>/dev/null | awk 'NR==2 {print $4}')
     if [[ -z "$available_kb" ]] || ! [[ "$available_kb" =~ ^[0-9]+$ ]]; then
         echo "Warning: Could not determine available disk space. Continuing installation."
         return 0
@@ -52,6 +55,22 @@ check_disk_space() {
     else
         echo "Sufficient disk space available: ${available_gb}GB"
         echo "Recommended minimal disk space: ${min_disk_space}GB"
+    fi
+
+    # Warn if the system's default temp directory is on a small/separate filesystem.
+    # Apptainer needs ~20 GB in its temp dir for SIF conversions. The pull function
+    # redirects APPTAINER_TMPDIR, but this early warning helps users understand
+    # potential issues with other tools that still use /tmp.
+    local min_tmp_gb=20
+    local tmp_dir="${TMPDIR:-/tmp}"
+    local tmp_kb
+    tmp_kb=$(df -P "$tmp_dir" 2>/dev/null | awk 'NR==2 {print $4}')
+    if [[ -n "$tmp_kb" ]] && [[ "$tmp_kb" =~ ^[0-9]+$ ]]; then
+        local tmp_gb=$((tmp_kb / 1048576))
+        if [ "$tmp_gb" -lt "$min_tmp_gb" ]; then
+            echo "Warning: Temp directory ($tmp_dir) has only ${tmp_gb}GB free (recommend >= ${min_tmp_gb}GB)."
+            echo "  Apptainer image pulls will use a local temp dir to avoid this constraint."
+        fi
     fi
 }
 
@@ -130,6 +149,30 @@ update_scripts() {
     echo "StrainCascade scripts have been updated successfully."
     echo "Please restart the installation script for the changes to take effect."
     exit 0
+}
+
+# Redirect Apptainer/Singularity temp and cache directories to the same filesystem
+# as the installation target. By default Apptainer uses /tmp for SIF conversion and
+# layer extraction, which on many HPC systems is a small tmpfs (RAM-backed).
+# This function must be called once before any apptainer pull/exec operations.
+setup_apptainer_env() {
+    mkdir -p "$APPTAINER_IMAGES_DIR"
+    local img_dir
+    img_dir="$(cd "$APPTAINER_IMAGES_DIR" && pwd)"
+    export APPTAINER_TMPDIR="$img_dir/.apptainer_tmp"
+    export APPTAINER_CACHEDIR="$img_dir/.apptainer_cache"
+    # Also set legacy Singularity variables for older runtime versions
+    export SINGULARITY_TMPDIR="$APPTAINER_TMPDIR"
+    export SINGULARITY_CACHEDIR="$APPTAINER_CACHEDIR"
+    mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR"
+}
+
+# Clean up Apptainer temporary build artefacts. Call at the end of all
+# apptainer operations (the cache directory is kept for potential re-pulls).
+cleanup_apptainer_env() {
+    if [[ -n "${APPTAINER_TMPDIR:-}" && -d "${APPTAINER_TMPDIR}" ]]; then
+        rm -rf "$APPTAINER_TMPDIR"
+    fi
 }
 
 # Function to pull Apptainer images
