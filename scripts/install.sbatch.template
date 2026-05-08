@@ -1,0 +1,63 @@
+#!/bin/bash
+# =============================================================================
+#  StrainCascade — reference SLURM submission script for full installation
+# =============================================================================
+#
+#  This is a *template*. Copy it, edit the placeholders marked <…>, and
+#  submit with:
+#
+#      cp scripts/install.sbatch.template install.sbatch
+#      sbatch install.sbatch        # run from the StrainCascade root
+#
+#  The installation downloads ~500 GB of databases and takes 12–30 h on a
+#  typical HPC node. It is idempotent: if the job fails or hits the wall
+#  time, simply resubmit — already-installed components are skipped.
+#
+#  PBS / LSF / SGE users: translate the #SBATCH header to your scheduler's
+#  directives; the body of the script is portable.
+# =============================================================================
+
+#SBATCH --job-name=StrainCascade_install
+#SBATCH --cpus-per-task=8           # MicrobeAnnotator parallel downloads
+#SBATCH --mem=96G                   # MicrobeAnnotator peak RSS is ~50 GB
+#SBATCH --time=48:00:00             # full install typically 12–30 h
+#SBATCH --nodes=1
+#SBATCH --output=logs/install_%j.out
+#SBATCH --error=logs/install_%j.err
+
+# --- Site-specific: uncomment and edit as required by your cluster ----------
+##SBATCH --account=<your_account>
+##SBATCH --partition=<your_partition>
+##SBATCH --qos=<your_qos>
+##SBATCH --mail-type=END,FAIL
+##SBATCH --mail-user=<your.email@example.org>
+# ----------------------------------------------------------------------------
+
+set -euo pipefail
+
+# SLURM copies the script to a spool directory before execution, so
+# BASH_SOURCE[0] no longer points to the original file. SLURM_SUBMIT_DIR is
+# the directory from which `sbatch` was invoked and must be the StrainCascade
+# repository root.
+SC_ROOT="${SLURM_SUBMIT_DIR:?Run this script via 'sbatch' from the StrainCascade root directory.}"
+mkdir -p "$SC_ROOT/logs"
+
+echo "============================================================"
+echo "  StrainCascade installation"
+echo "  Job ID  : ${SLURM_JOB_ID:-N/A}"
+echo "  Node    : ${SLURM_NODELIST:-$(hostname)}"
+echo "  Started : $(date '+%Y-%m-%d %H:%M:%S')"
+echo "============================================================"
+
+# Idempotent, non-interactive full install. Re-run safely on failure:
+# --skip-existing detects completed components (Bakta version.json,
+# MicrobeAnnotator sentinel, etc.) and resumes only what is missing.
+#
+# Verbosity: 0=quiet (log file only), 1=normal (default), 2=verbose.
+STRAINCASCADE_VERBOSITY=1 \
+    bash "$SC_ROOT/scripts/StrainCascade_installation.sh" \
+        --full --yes --skip-existing
+
+echo "============================================================"
+echo "  Finished: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "============================================================"

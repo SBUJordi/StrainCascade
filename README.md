@@ -20,26 +20,11 @@ StrainCascade is a modular bioinformatics pipeline designed to comprehensively p
 
 -   ([Bash](https://tiswww.case.edu/php/chet/bash/bashtop.html) as command-line shell)
 
--   (Optional: [Conda/Miniconda](https://docs.anaconda.com/miniconda/))
-
 -   All further software dependencies are bundled in Apptainer images, which are automatically downloaded and used when installing/running StrainCascade.
 
 ## Installation
 
 For standard installation with the command-line interface, follow these steps:
-
-Optional - Create and activate a conda environment for StrainCascade:
-
-``` bash
-conda create -n StrainCascade_env
-conda activate StrainCascade_env
-```
-
-Optional - Navigate to your StrainCascade conda environment directory:
-
-``` bash
-cd $CONDA_PREFIX
-```
 
 Clone the StrainCascade GitHub repository to your current working directory
 
@@ -62,5 +47,11 @@ find scripts/ -type f -exec chmod +x {} \;
 Execute the installation script, which pulls Apptainer images and downloads databases:
 
 ``` bash
+# Interactive (recommended for first-time users)
 ./scripts/StrainCascade_installation.sh
+
+# Non-interactive, idempotent (safe to re-run after a transient failure)
+./scripts/StrainCascade_installation.sh --full --yes
 ```
+
+For all installation options (custom installation, resuming a failed installation, verbosity, advanced multi-install setup with Conda) see the [installation documentation](https://sbujordi.github.io/StrainCascade/docs/installation.html).

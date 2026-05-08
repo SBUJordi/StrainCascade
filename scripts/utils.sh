@@ -183,7 +183,6 @@ help() {
 handle_software_update() {
     # Store the current directory
     local current_dir=$(pwd)
-    local parent_dir="$(dirname "$script_dir")"
 
     echo "Updating StrainCascade software..."
     # Change to script directory
@@ -191,21 +190,11 @@ handle_software_update() {
         echo "Error: Failed to change to script directory" >&2
         return 1
     }
-    
-    # Call the function to update scripts
+
+    # Call the function to update scripts.
+    # update_scripts() now prefers an in-place 'git pull --ff-only' when the
+    # installation is a git checkout, and preserves the .git directory.
     update_scripts
-    
-    # Remove git history
-    if [ -n "${parent_dir}" ]; then
-        if [ -d "${parent_dir}/.git" ]; then
-            rm -rf "${parent_dir}/.git" 2>/dev/null || {
-                echo "Warning: Failed to remove .git directory in ${parent_dir}" >&2
-                true
-            }
-        fi
-    else
-        echo "Warning: parent_dir is not defined" >&2
-    fi
 
     # Return to original directory
     cd "$current_dir" || {

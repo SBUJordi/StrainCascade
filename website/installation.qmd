@@ -13,7 +13,6 @@ title: "Installation"
 - [Git](https://git-scm.com/)
 - [Apptainer](https://apptainer.org/)
 - [Bash](https://tiswww.case.edu/php/chet/bash/bashtop.html) as command-line shell
-- Optional: [Conda/Miniconda](https://docs.anaconda.com/miniconda/)
 - All further software dependencies are bundled in Apptainer images, automatically downloaded during installation. This ensures:
   1. **Ease of use** — simplified installation and execution
   2. **Portability** — consistent performance across computing environments
@@ -22,19 +21,6 @@ title: "Installation"
   5. **Isolation** — minimal conflicts with existing system libraries
 
 ## Default Installation (Interactive)
-
-Optional — create and activate a conda environment:
-
-```bash
-conda create -n StrainCascade_env
-conda activate StrainCascade_env
-```
-
-Optional — navigate to the conda environment directory:
-
-```bash
-cd $CONDA_PREFIX
-```
 
 Clone the repository:
 
@@ -57,18 +43,12 @@ find scripts/ -type f -exec chmod +x {} \;
 Run the installation script:
 
 ```bash
-# Interactive installation with normal verbosity (recommended)
+# Interactive installation (recommended for first-time users)
 ./scripts/StrainCascade_installation.sh
-
-# Quiet full installation
-STRAINCASCADE_VERBOSITY=0 ./scripts/StrainCascade_installation.sh --full
-
-# Verbose interactive installation
-STRAINCASCADE_VERBOSITY=2 ./scripts/StrainCascade_installation.sh
 ```
 
 ::: {.callout-note}
-The installation may take between 12 hours to over a day, depending on your system and network speed.
+The installation may take between 12 hours to over a day, depending on your system and network speed. Large database downloads (GTDB-Tk, MicrobeAnnotator, Bakta) are the longest steps.
 :::
 
 If you choose the default interactive installation, you will be prompted:
@@ -80,26 +60,88 @@ Apptainer is installed.
 Do you want to do a full installation of StrainCascade? (y/n)
 ```
 
+## Non-Interactive Installation
+
+For automated / unattended installs (CI, Dockerfile, HPC batch jobs):
+
+```bash
+# Idempotent full install — safe to re-run after a crash
+./scripts/StrainCascade_installation.sh --full --yes
+
+# Force reinstall everything
+./scripts/StrainCascade_installation.sh --full --yes --force
+
+# Quiet install (output goes to a log file under apptainer_images/.install_logs/)
+STRAINCASCADE_VERBOSITY=0 ./scripts/StrainCascade_installation.sh --full --yes
+
+# Verbose install (full subcommand output)
+STRAINCASCADE_VERBOSITY=2 ./scripts/StrainCascade_installation.sh --full --yes
+```
+
+Available flags:
+
+| Flag | Effect |
+|---|---|
+| `--full` | Run all phases (PATH + images + databases). Implies `--skip-existing` unless `--force` is given. |
+| `--scripts` | PATH setup only. |
+| `--images` | Pull Apptainer images only. |
+| `--databases` | Install databases only. |
+| `--skip-existing` | Skip already-installed components (idempotent re-runs). |
+| `--force` | Force reinstall, overwriting any existing data. |
+| `-y`, `--yes` | Auto-accept all prompts. |
+| `-h`, `--help` | Show help. |
+
+`STRAINCASCADE_VERBOSITY` accepts `0` (quiet, log-only), `1` (normal, default), or `2` (verbose).
+
+## Running the Installation on an HPC Cluster
+
+The full installation downloads ~500 GB and takes 12–30 h, so it should be submitted as a batch job rather than run on a login node. A scheduler-agnostic SLURM template is provided at [`scripts/install.sbatch.template`](https://github.com/SBUJordi/StrainCascade/blob/main/scripts/install.sbatch.template). Copy it, edit the site-specific placeholders (`--account`, `--partition`, `--qos`, e-mail), and submit from the StrainCascade root:
+
+```bash
+cp scripts/install.sbatch.template install.sbatch
+# edit the #SBATCH header for your cluster, then:
+sbatch install.sbatch
+```
+
+Recommended resources (validated on a typical HPC node):
+
+| Resource | Value | Rationale |
+|---|---|---|
+| CPUs | 8 | MicrobeAnnotator parallel downloads; further parallelism gives no speed-up because the bottleneck is remote FTP. |
+| Memory | 96 GB | MicrobeAnnotator peaks around 50 GB resident memory when parsing the RefSeq–KO mapping. |
+| Walltime | 48 h | Typical end-to-end runtime is 12–30 h; the extra margin accommodates network fluctuations. |
+| Local scratch | not required | The installer redirects Apptainer `TMPDIR`/`CACHEDIR` to the installation filesystem and forces `TMPDIR=/tmp` inside containers, so node-local scratch is not needed. |
+
+The submitted job runs `StrainCascade_installation.sh --full --yes --skip-existing` and is safe to resubmit unchanged if it fails or hits the wall time: only missing components will be re-attempted.
+
+PBS / LSF / SGE users can reuse the body of the template and translate the `#SBATCH` directives to their scheduler's syntax.
+
 ## Custom Installation
 
-If you choose `n` when prompted for a full installation, you can selectively install individual Apptainer images and databases. This is useful when:
-
-- You have limited disk space or bandwidth
-- A previous installation was interrupted
-- You want to isolate specific components for testing
-
-Each component will be offered individually:
+Run the installer interactively and answer `n` when asked for a full installation; the installer will then offer each component individually:
 
 ```
 Do you want to install checkm2_db? (y/n)
 ```
+
+Useful when you have limited disk space or bandwidth, or when you want to install just one component.
+
+## Resuming a Failed Installation
+
+Database downloads (especially MicrobeAnnotator, GTDB-Tk, Bakta) can fail after many hours due to remote-server hiccups. The installer is designed to be **idempotent**: simply re-run with `--skip-existing` and only the missing/incomplete pieces will be installed:
+
+```bash
+./scripts/StrainCascade_installation.sh --full --yes --skip-existing
+```
+
+Failure logs are written under `apptainer_images/.install_logs/`.
 
 ## Updating StrainCascade
 
 StrainCascade provides separate update mechanisms for its three main components:
 
 ```bash
-# Update software scripts
+# Update software scripts (uses 'git pull --ff-only' if installed via git)
 straincascade -us
 
 # Update Apptainer images
@@ -115,12 +157,14 @@ These individual update mechanisms are designed for minor version updates and pa
 
 ## Caveats
 
-- **PATH configuration for multiple installations:** The installation process updates your `PATH` variable. If you experience issues with multiple installations, verify that `$PATH` points to the correct one.
+- **PATH configuration:** The installer prints the exact `export PATH=...` line you need and asks before modifying any shell init file. With `--yes` it auto-appends to the rc file matching your `$SHELL`. If you maintain multiple installs, verify `which straincascade` points to the one you intend.
 
-- **Third-party database installation:** Larger databases (e.g., GTDB-Tk, AMRFinderPlus for Bakta) may occasionally fail due to network or server issues. Retry after a few hours if problems occur.
+- **Third-party database downloads:** Larger databases (GTDB-Tk, MicrobeAnnotator, Bakta, AMRFinderPlus) may occasionally fail due to network or remote-server issues. The installer now retries with exponential backoff and supports resuming via `--skip-existing`. If you still hit a hard failure, retry after a few hours.
 
 - **Managing Apptainer images after updates:** Newer image versions may be downloaded during updates. StrainCascade prioritises the first matching image. Check and clean the `apptainer_images` directory after re-installations:
 
   ```bash
   cd $(dirname $(which straincascade))/../apptainer_images
   ```
+
+- **Advanced — running multiple installations side by side:** If you want each installation isolated, activate a dedicated Conda environment (`conda create -n StrainCascade_env && conda activate StrainCascade_env`) before running the installer. The installer detects the active env and scopes `PATH` to it via `activate.d`/`deactivate.d` hooks. For a single global installation this is not needed.

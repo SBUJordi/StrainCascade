@@ -19,6 +19,131 @@ readonly DEFAULT_DB_LOCATION="../databases"
 # Default Apptainer images directory
 readonly APPTAINER_IMAGES_DIR="../apptainer_images"
 
+# ----------------------------------------------------------------------------
+# Installer behaviour flags (set by StrainCascade_installation.sh argument
+# parser; safe defaults so functions also work when called from other scripts).
+#   STRAINCASCADE_VERBOSITY  0=quiet  1=normal (default)  2=verbose
+#   SC_NON_INTERACTIVE       1 to suppress all prompts (auto-yes)
+#   SC_SKIP_EXISTING         1 to skip already-installed images/databases
+#   SC_FORCE                 1 to force reinstall (overrides SC_SKIP_EXISTING)
+# ----------------------------------------------------------------------------
+: "${STRAINCASCADE_VERBOSITY:=1}"
+: "${SC_NON_INTERACTIVE:=0}"
+: "${SC_SKIP_EXISTING:=0}"
+: "${SC_FORCE:=0}"
+export STRAINCASCADE_VERBOSITY SC_NON_INTERACTIVE SC_SKIP_EXISTING SC_FORCE
+
+# Verbosity-aware logging.
+# Levels: 0=always (errors/section headers), 1=normal info, 2=debug.
+vlog() {
+    local level="$1"; shift
+    if [ "$STRAINCASCADE_VERBOSITY" -ge "$level" ]; then
+        echo "$@"
+    fi
+}
+
+# Run a command, routing its stdout/stderr according to verbosity.
+#   Verbosity 0: stdout+stderr -> log file only
+#   Verbosity 1: stdout -> log file, stderr -> terminal + log file
+#   Verbosity 2: stdout+stderr -> terminal + log file
+# Returns the command's exit code.
+sc_install_log_dir() {
+    local img_dir
+    img_dir="$(cd "$APPTAINER_IMAGES_DIR" 2>/dev/null && pwd)" || img_dir="$APPTAINER_IMAGES_DIR"
+    local log_dir="$img_dir/.install_logs"
+    mkdir -p "$log_dir" 2>/dev/null || true
+    echo "$log_dir"
+}
+
+vrun() {
+    local log_dir
+    log_dir="$(sc_install_log_dir)"
+    local log_file="$log_dir/install_$(date +%Y%m%d).log"
+    {
+        echo "----- $(date '+%Y-%m-%d %H:%M:%S') CMD: $* -----"
+    } >> "$log_file" 2>/dev/null || true
+
+    if [ "$STRAINCASCADE_VERBOSITY" -ge 2 ]; then
+        # Verbose: tee everything to terminal AND log
+        "$@" 2>&1 | tee -a "$log_file"
+        return "${PIPESTATUS[0]}"
+    elif [ "$STRAINCASCADE_VERBOSITY" -le 0 ]; then
+        # Quiet: log only
+        "$@" >> "$log_file" 2>&1
+        return $?
+    else
+        # Normal: stderr to terminal + log, stdout to log only
+        "$@" 2> >(tee -a "$log_file" >&2) >> "$log_file"
+        return $?
+    fi
+}
+
+# Generic retry-with-exponential-backoff wrapper.
+# Usage: retry_with_backoff <max_attempts> <initial_sleep_s> -- <cmd> [args...]
+# Or:    retry_with_backoff <max_attempts> <initial_sleep_s> <cmd_string>
+retry_with_backoff() {
+    local max_attempts="$1"; shift
+    local sleep_seconds="$1"; shift
+    # Allow '--' delimiter for clarity
+    if [ "${1:-}" = "--" ]; then shift; fi
+
+    local attempt=1
+    local rc=0
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if [ "$attempt" -gt 1 ]; then
+            vlog 1 "  Retry attempt $attempt/$max_attempts (waiting ${sleep_seconds}s)..."
+            sleep "$sleep_seconds"
+            sleep_seconds=$(( sleep_seconds * 2 ))
+        fi
+        if [ $# -eq 1 ]; then
+            # shellcheck disable=SC2086
+            bash -c "$1"
+            rc=$?
+        else
+            "$@"
+            rc=$?
+        fi
+        if [ "$rc" -eq 0 ]; then
+            return 0
+        fi
+        # Fail-fast on signal kills (128 + signal number):
+        #   137 = SIGKILL (typically OOM-killer)
+        #   143 = SIGTERM (typically SLURM walltime / cancellation)
+        # These are deterministic resource/control failures; retrying just
+        # wastes hours of compute. Surface them immediately so the caller
+        # can raise memory / walltime instead.
+        if [ "$rc" -eq 137 ] || [ "$rc" -eq 143 ]; then
+            vlog 0 "  Command was killed by a signal (exit $rc); not retrying (likely OOM or walltime)."
+            return "$rc"
+        fi
+        attempt=$(( attempt + 1 ))
+    done
+    return "$rc"
+}
+
+# Prompt the user (y/n) honouring SC_NON_INTERACTIVE.
+# Usage: ask_yes_no "Question text" <default y|n>
+# Returns 0 for yes, 1 for no.
+ask_yes_no() {
+    local prompt="$1"
+    local default="${2:-n}"
+    local hint="[y/N]"
+    [ "$default" = "y" ] && hint="[Y/n]"
+
+    if [ "$SC_NON_INTERACTIVE" = "1" ]; then
+        # Non-interactive: assume default
+        [ "$default" = "y" ] && return 0 || return 1
+    fi
+
+    local reply
+    read -r -p "$prompt $hint " reply
+    reply="${reply:-$default}"
+    case "$reply" in
+        y|Y|yes|YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Function to check if script is in the main directory
 check_main_directory() {
     for dir in "${required_dirs[@]}"; do
@@ -105,50 +230,61 @@ check_required_tools() {
     echo "All required tools are available."
 }
 
-# Function to update StrainCascade scripts
+# Function to update StrainCascade scripts.
+#
+# Behaviour:
+#   * If the parent directory is a git checkout (has a .git/ folder), perform
+#     a fast-forward-only `git pull` against the configured remote. This is
+#     the safe, standard way to update a cloned public repo and keeps the
+#     git history intact for users who want to track upstream.
+#   * Otherwise (e.g. the user installed from a tarball with no .git), fall
+#     back to the previous clone-into-temp-and-copy approach.
+#
+# IMPORTANT: this function NO LONGER deletes the user's .git directory.
 update_scripts() {
-    local current_dir=$(pwd)
-    local parent_dir="$(dirname "$current_dir")"
-    local temp_dir="$parent_dir/script_update_temp"
+    local current_dir
+    current_dir=$(pwd)
+    local parent_dir
+    parent_dir="$(dirname "$current_dir")"
 
     echo "Updating StrainCascade scripts..."
 
-    # Create temporary directory
-    mkdir -p "$temp_dir"
-    cd "$temp_dir"
+    if [ -d "${parent_dir}/.git" ] && command -v git >/dev/null 2>&1; then
+        echo "Detected git checkout at ${parent_dir}; updating via 'git pull --ff-only'..."
+        if ( cd "$parent_dir" && git fetch --quiet && git pull --ff-only ); then
+            echo "StrainCascade has been updated successfully via git."
+            echo "Please restart any running shells / sourced configs for changes to take effect."
+            return 0
+        else
+            echo "Warning: 'git pull --ff-only' failed (likely diverging history or local changes)." >&2
+            echo "Refusing to overwrite local modifications. Resolve manually with:" >&2
+            echo "    cd ${parent_dir} && git status && git pull --ff-only" >&2
+            return 1
+        fi
+    fi
 
-    # Clone the latest version of the public repository
-    if ! git clone https://github.com/SBUJordi/StrainCascade.git; then
-        echo "Failed to clone the repository. Update aborted."
-        cd "$current_dir"
+    # Non-git installation: fall back to clone-and-copy.
+    local temp_dir="$parent_dir/script_update_temp"
+    mkdir -p "$temp_dir"
+    cd "$temp_dir" || return 1
+
+    if ! git clone --depth 1 https://github.com/SBUJordi/StrainCascade.git; then
+        echo "Failed to clone the repository. Update aborted." >&2
+        cd "$current_dir" || true
         rm -rf "$temp_dir"
         return 1
     fi
 
-    # Copy new scripts to the original location
     cp -R StrainCascade/scripts/* "$current_dir"
     mkdir -p "${current_dir}/../assets"
     cp -R "StrainCascade/assets/." "${current_dir}/../assets/"
-    
-    # Clean up
-    cd "$current_dir"
+
+    cd "$current_dir" || true
     rm -rf "$temp_dir"
-    
-    # Remove git history
-    if [ -n "${parent_dir}" ]; then
-        if [ -d "${parent_dir}/.git" ]; then
-            rm -rf "${parent_dir}/.git" 2>/dev/null || {
-                echo "Warning: Failed to remove .git directory in ${parent_dir}" >&2
-                true
-            }
-        fi
-    else
-        echo "Warning: parent_dir is not defined" >&2
-    fi
 
     echo "StrainCascade scripts have been updated successfully."
-    echo "Please restart the installation script for the changes to take effect."
-    exit 0
+    echo "Please restart any running shells / sourced configs for changes to take effect."
+    return 0
 }
 
 # Redirect Apptainer/Singularity temp and cache directories to the same filesystem
@@ -165,6 +301,17 @@ setup_apptainer_env() {
     export SINGULARITY_TMPDIR="$APPTAINER_TMPDIR"
     export SINGULARITY_CACHEDIR="$APPTAINER_CACHEDIR"
     mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR"
+
+    # Force TMPDIR=/tmp inside the container. On SLURM clusters,
+    # the host TMPDIR is set to a node-local path like /scratch/local/<jobid>
+    # which is NOT bind-mounted into the container by default. Apptainer would
+    # otherwise propagate that variable into the container, causing tools that
+    # honour $TMPDIR (amrfinder_update, mamba/conda, snakemake) to crash with:
+    #   "Error creating a temporary directory in /scratch/local/<jobid>"
+    # The APPTAINERENV_ / SINGULARITYENV_ prefix translates to setting the
+    # variable INSIDE the container only, regardless of the host value.
+    export APPTAINERENV_TMPDIR="/tmp"
+    export SINGULARITYENV_TMPDIR="/tmp"
 }
 
 # Clean up Apptainer temporary build artefacts. Call at the end of all
@@ -176,6 +323,9 @@ cleanup_apptainer_env() {
 }
 
 # Function to pull Apptainer images
+# Honours SC_SKIP_EXISTING / SC_FORCE / SC_NON_INTERACTIVE.
+# Failures are collected and retried once at the end; the function does not
+# abort the whole installation on a single image failure.
 pull_apptainer_images() {
     mkdir -p "$APPTAINER_IMAGES_DIR"
     # Add the list of docker images to be pulled (always use :latest tag)
@@ -191,96 +341,228 @@ pull_apptainer_images() {
         "sbujordi/straincascade_document_processing:latest"
     )
 
-    for image in "${docker_images[@]}"; do
-        # Convert docker image name to SIF filename (replace : with _)
-        local image_basename=$(basename "$image" | tr ':' '_')
-        local image_file="$APPTAINER_IMAGES_DIR/${image_basename}.sif"
-        
-        if [ -f "$image_file" ]; then
-            read -p "Image file $image_file already exists. Overwrite? [Y/n] " choice
-            case "$choice" in
-                n|N ) echo "Skipping $image_file..."; continue;;
-                * ) echo "Overwriting $image_file..."; force_flag="--force";;
-            esac
+    local total=${#docker_images[@]}
+    local current=0
+    local failed_images=()
+    local skipped=0
+    local pulled=0
+
+    _pull_one_image() {
+        local image="$1"
+        local image_file="$2"
+        local force_flag="$3"
+        # apptainer pull writes mostly progress to stderr; route through vrun.
+        if [ -n "$force_flag" ]; then
+            vrun apptainer pull "$force_flag" "$image_file" "docker://$image"
         else
-            force_flag=""
+            vrun apptainer pull "$image_file" "docker://$image"
         fi
-        echo "Pulling $image..."
-        apptainer pull $force_flag "$image_file" "docker://$image"
-        if [ $? -ne 0 ]; then
-            echo "Error: Failed to pull $image"
-            exit 1
+    }
+
+    for image in "${docker_images[@]}"; do
+        current=$((current + 1))
+        local image_basename
+        image_basename=$(basename "$image" | tr ':' '_')
+        local image_file="$APPTAINER_IMAGES_DIR/${image_basename}.sif"
+        local force_flag=""
+
+        if [ -f "$image_file" ]; then
+            if [ "$SC_FORCE" = "1" ]; then
+                force_flag="--force"
+            elif [ "$SC_SKIP_EXISTING" = "1" ]; then
+                vlog 1 "[$current/$total] Skipping existing image: $image_basename.sif"
+                skipped=$((skipped + 1))
+                continue
+            elif [ "$SC_NON_INTERACTIVE" = "1" ]; then
+                # Default for interactive non-flagged runs: skip if present
+                vlog 1 "[$current/$total] Skipping existing image (non-interactive default): $image_basename.sif"
+                skipped=$((skipped + 1))
+                continue
+            else
+                if ask_yes_no "Image file $image_file already exists. Overwrite?" "y"; then
+                    force_flag="--force"
+                else
+                    vlog 1 "Skipping $image_file..."
+                    skipped=$((skipped + 1))
+                    continue
+                fi
+            fi
+        fi
+
+        vlog 0 "[$current/$total] Pulling $image..."
+        if retry_with_backoff 3 30 -- _pull_one_image "$image" "$image_file" "$force_flag"; then
+            pulled=$((pulled + 1))
+        else
+            vlog 0 "Warning: Failed to pull $image after 3 attempts; will retry at end of phase." >&2
+            failed_images+=("$image")
         fi
     done
 
-    echo "All chosen images pulled successfully."
+    # Final retry pass for any failures (one more attempt with longer backoff).
+    if [ "${#failed_images[@]}" -gt 0 ]; then
+        vlog 0 "Retrying ${#failed_images[@]} failed image pull(s) once more..."
+        local still_failed=()
+        for image in "${failed_images[@]}"; do
+            local image_basename
+            image_basename=$(basename "$image" | tr ':' '_')
+            local image_file="$APPTAINER_IMAGES_DIR/${image_basename}.sif"
+            local force_flag=""
+            [ -f "$image_file" ] && force_flag="--force"
+            if retry_with_backoff 2 120 -- _pull_one_image "$image" "$image_file" "$force_flag"; then
+                pulled=$((pulled + 1))
+            else
+                still_failed+=("$image")
+            fi
+        done
+        failed_images=("${still_failed[@]}")
+    fi
+
+    echo ""
+    echo "=========================================="
+    echo "  Apptainer Image Pull Summary"
+    echo "=========================================="
+    echo "  Total: $total | Pulled: $pulled | Skipped: $skipped | Failed: ${#failed_images[@]}"
+    if [ "${#failed_images[@]}" -gt 0 ]; then
+        echo "  FAILED:"
+        for image in "${failed_images[@]}"; do echo "    - $image"; done
+        echo "  See $(sc_install_log_dir) for details. You can re-run with --skip-existing"
+        echo "  to retry only the failed images without re-pulling successful ones."
+    fi
+    echo "=========================================="
+
+    # Return non-zero if everything failed; otherwise success so the
+    # installer continues to the database phase.
+    if [ "${#failed_images[@]}" -eq "$total" ] && [ "$total" -gt 0 ]; then
+        return 1
+    fi
+    return 0
 }
 
-# Function to add scripts directory to PATH in a portable way
+# Function to add scripts directory to PATH in a portable way.
+#
+# Gold-standard behaviour (cf. rustup, mise, fnm):
+#   1. ALWAYS print the exact export line the user needs.
+#   2. If a non-base Conda env is active, scope the change to that env via
+#      activate.d/deactivate.d hooks (this is opt-in by virtue of activating
+#      the env before running the installer; matches existing behaviour).
+#   3. Otherwise, ASK before modifying the user's shell init file.
+#      With SC_NON_INTERACTIVE=1, default to auto-add to the rc file matching
+#      $SHELL (creating it if missing) so CI / Dockerfile installs still work.
 add_scripts_to_path() {
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    
-    # Function to add path without duplication
+    local sc_dir
+    sc_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    # Helper: prepend without duplication (used for current session only)
     add_path_once() {
         if [[ ":$PATH:" != *":$1:"* ]]; then
             PATH="$1:$PATH"
+            export PATH
         fi
     }
 
-    # Function to remove path
-    remove_path() {
-        PATH=$(echo $PATH | sed -e "s|:$1||g" -e "s|$1:||g" -e "s|$1||g")
-    }
+    echo ""
+    echo "=========================================="
+    echo "  PATH Configuration"
+    echo "=========================================="
+    echo "  StrainCascade scripts directory:"
+    echo "    $sc_dir"
+    echo ""
+    echo "  To use the 'straincascade' command, this directory must be on your PATH."
+    echo "  Add the following line to your shell init file (~/.bashrc, ~/.zshrc, ..):"
+    echo ""
+    echo "      export PATH=\"$sc_dir:\$PATH\""
+    echo ""
 
-    # Check if a non-base Conda environment is active
+    # Conda-active path: scope to the env (existing, well-tested behaviour).
     if [[ -n "${CONDA_DEFAULT_ENV:-}" && "${CONDA_DEFAULT_ENV:-}" != "base" ]]; then
-        echo "Conda environment '$CONDA_DEFAULT_ENV' is active."
-        
-        # Get the path to the active Conda environment
-        # Use CONDA_PREFIX (set by conda activate) which is reliable across conda versions,
-        # rather than parsing 'conda info --envs' output which varies by version.
-        conda_env_path="${CONDA_PREFIX:?CONDA_PREFIX is not set - cannot configure PATH for conda environment}"
-        
-        # Add the script directory to the Conda environment's activation script
-        activate_script="$conda_env_path/etc/conda/activate.d/env_vars.sh"
-        deactivate_script="$conda_env_path/etc/conda/deactivate.d/env_vars.sh"
-        
+        echo "  Detected active Conda environment: '$CONDA_DEFAULT_ENV'"
+        echo "  PATH will be scoped to this environment via activate.d/deactivate.d hooks."
+
+        local conda_env_path="${CONDA_PREFIX:?CONDA_PREFIX is not set - cannot configure PATH for conda environment}"
+        local activate_script="$conda_env_path/etc/conda/activate.d/env_vars.sh"
+        local deactivate_script="$conda_env_path/etc/conda/deactivate.d/env_vars.sh"
+
         mkdir -p "$(dirname "$activate_script")" "$(dirname "$deactivate_script")"
-        
-        echo "Adding scripts directory to PATH for Conda environment '$CONDA_DEFAULT_ENV'."
-        echo "add_path_once() { if [[ \":\$PATH:\" != *\":\$1:\"* ]]; then PATH=\"\$1:\$PATH\"; fi }" > "$activate_script"
-        echo "add_path_once \"$script_dir\"" >> "$activate_script"
-        
-        echo "remove_path() { PATH=\$(echo \$PATH | sed -e \"s|:\$1||g\" -e \"s|\$1:||g\" -e \"s|\$1||g\"); }" > "$deactivate_script"
-        echo "remove_path \"$script_dir\"" >> "$deactivate_script"
-        
-        # Immediately update the current session's PATH
-        add_path_once "$script_dir"
-        
-        echo "Scripts directory added to PATH for Conda environment '$CONDA_DEFAULT_ENV'."
-        echo "The change will take effect in new terminal sessions or after reactivating the environment."
-    else
-        echo "No specific Conda environment active. Adding to shell config files."
-        
-        declare -a shell_configs=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish")
+        {
+            echo 'add_path_once() { if [[ ":$PATH:" != *":$1:"* ]]; then PATH="$1:$PATH"; fi }'
+            echo "add_path_once \"$sc_dir\""
+        } > "$activate_script"
+        {
+            echo 'remove_path() { PATH=$(echo "$PATH" | sed -e "s|:$1||g" -e "s|$1:||g" -e "s|$1||g"); }'
+            echo "remove_path \"$sc_dir\""
+        } > "$deactivate_script"
 
-        for config in "${shell_configs[@]}"; do
-            if [[ -f "$config" ]]; then
-                if grep -q "$script_dir" "$config"; then
-                    echo "Scripts directory already in PATH in $config."
-                else
-                    echo "Adding scripts directory to PATH in $config."
-                    echo "# Added by StrainCascade_installation.sh" >> "$config"
-                    echo "if [[ \":\$PATH:\" != *\":$script_dir:\"* ]]; then export PATH=\"$script_dir:\$PATH\"; fi" >> "$config"
-                fi
-            fi
-        done
-
-        # Immediately update the current session's PATH
-        add_path_once "$script_dir"
-
-        echo "Please restart your terminal or source your shell configuration file to update your PATH."
+        add_path_once "$sc_dir"
+        echo "  Done. Take effect on next 'conda activate $CONDA_DEFAULT_ENV'."
+        echo "=========================================="
+        return 0
     fi
+
+    # Always update the current session immediately.
+    add_path_once "$sc_dir"
+
+    # Determine which rc file to target based on $SHELL.
+    local target_rc=""
+    case "${SHELL:-}" in
+        */zsh)  target_rc="$HOME/.zshrc" ;;
+        */bash) target_rc="$HOME/.bashrc" ;;
+        */fish) target_rc="$HOME/.config/fish/config.fish" ;;
+        *)
+            # Fall back to the first existing rc, else ~/.bashrc
+            for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+                if [ -f "$rc" ]; then target_rc="$rc"; break; fi
+            done
+            [ -z "$target_rc" ] && target_rc="$HOME/.bashrc"
+            ;;
+    esac
+
+    # Check for already-present marker
+    local marker="# Added by StrainCascade_installation.sh"
+    if [ -f "$target_rc" ] && grep -qF "$sc_dir" "$target_rc"; then
+        echo "  StrainCascade scripts directory is already in $target_rc."
+        echo "=========================================="
+        return 0
+    fi
+
+    local do_modify=0
+    if [ "$SC_NON_INTERACTIVE" = "1" ]; then
+        # In non-interactive mode, auto-add (so CI / Dockerfiles work).
+        do_modify=1
+        echo "  Non-interactive mode: auto-appending PATH export to $target_rc"
+    else
+        if ask_yes_no "  Append the export line above to $target_rc now?" "n"; then
+            do_modify=1
+        else
+            echo "  Skipped automatic modification. Please add the line above manually."
+        fi
+    fi
+
+    if [ "$do_modify" = "1" ]; then
+        # Create file if it doesn't exist (e.g. fresh container / HPC account).
+        mkdir -p "$(dirname "$target_rc")"
+        if [ ! -f "$target_rc" ]; then
+            touch "$target_rc"
+            echo "  Created $target_rc"
+        fi
+        if [[ "$target_rc" == *config.fish ]]; then
+            {
+                echo ""
+                echo "$marker"
+                echo "if not contains $sc_dir \$PATH"
+                echo "    set -gx PATH $sc_dir \$PATH"
+                echo "end"
+            } >> "$target_rc"
+        else
+            {
+                echo ""
+                echo "$marker"
+                echo "if [[ \":\$PATH:\" != *\":$sc_dir:\"* ]]; then export PATH=\"$sc_dir:\$PATH\"; fi"
+            } >> "$target_rc"
+        fi
+        echo "  Added PATH entry to $target_rc"
+        echo "  Restart your terminal or run: source $target_rc"
+    fi
+    echo "=========================================="
 }
 
 # Function to check if a container image exists
@@ -311,6 +593,13 @@ is_database_installed() {
             [[ -d "$db_dir/resfinder_db" ]] && [[ "$(ls -A "$db_dir/resfinder_db" 2>/dev/null)" ]] && \
             [[ -d "$db_dir/pointfinder_db" ]] && [[ -d "$db_dir/disinfinder_db" ]]
             ;;
+        "microbeannotator_db")
+            # microbeannotator.db is created during Step 12 but is incomplete
+            # if the process was killed before finishing (Parsing RefSeq KO
+            # numbers). Use a separate sentinel file written only after a clean
+            # exit to distinguish a complete install from a partial one.
+            [[ -f "$db_dir/$db_name/.straincascade_installed" ]]
+            ;;
         *)
             [[ -d "$db_dir/$db_name" ]] && [[ "$(ls -A "$db_dir/$db_name" 2>/dev/null)" ]]
             ;;
@@ -328,9 +617,20 @@ install_individual_database() {
         "checkm2_db")
             db_url="https://zenodo.org/api/records/5571251/files/checkm2_database.tar.gz/content"
             mkdir -p "$db_dir/$db_name"
-            if curl -L --connect-timeout 30 --max-time 600 "$db_url" | tar -xz -C "$db_dir/$db_name"; then
-                mv "$db_dir/$db_name/CheckM2_database/"* "$db_dir/$db_name/"
-                rmdir "$db_dir/$db_name/CheckM2_database"
+            local archive="$db_dir/$db_name/checkm2_database.tar.gz"
+            # Resumable download (-C -) with built-in curl retry; then extract.
+            # Avoids the previous 'curl | tar' pipe which discarded any partial
+            # download on a transient network drop.
+            if retry_with_backoff 3 60 -- curl -L --fail \
+                    --retry 10 --retry-all-errors --retry-delay 30 \
+                    --connect-timeout 30 -C - \
+                    -o "$archive" "$db_url" \
+               && tar -xzf "$archive" -C "$db_dir/$db_name"; then
+                rm -f "$archive"
+                if [ -d "$db_dir/$db_name/CheckM2_database" ]; then
+                    mv "$db_dir/$db_name/CheckM2_database/"* "$db_dir/$db_name/"
+                    rmdir "$db_dir/$db_name/CheckM2_database"
+                fi
                 echo "$db_name database installed successfully in $db_dir/$db_name"
                 return 0
             else
@@ -347,7 +647,14 @@ install_individual_database() {
                 echo "wget is required but not installed. Aborting." >&2
                 return 1
             fi
-            if wget --timeout=30 --tries=3 -P "$db_dir/$db_name" "$primary_url" || wget --timeout=30 --tries=3 -P "$db_dir/$db_name" "$backup_url"; then
+            # Resumable (-c) wget with retries, wrapped in our backoff helper for
+            # extra resilience on long-running multi-GB downloads.
+            if retry_with_backoff 3 60 -- wget -c --tries=10 --waitretry=30 \
+                    --read-timeout=60 --timeout=30 \
+                    -P "$db_dir/$db_name" "$primary_url" \
+               || retry_with_backoff 3 60 -- wget -c --tries=10 --waitretry=30 \
+                    --read-timeout=60 --timeout=30 \
+                    -P "$db_dir/$db_name" "$backup_url"; then
                 download_success=true
             fi
             if [ "$download_success" = true ]; then
@@ -401,18 +708,42 @@ install_individual_database() {
                 done
             }
 
-            # Download and install Bakta database v6.0 using the container
-            # This automatically handles xz decompression and creates the amrfinderplus-db directory structure
-            if ! apptainer exec \
-                --bind "$db_dir/$db_name":/mnt/db \
-                "${straincascade_genome_annotation}" \
-                bash -c "source /opt/conda/etc/profile.d/conda.sh && \
-                        conda activate bakta_env && \
-                        echo \"Downloading Bakta database (full type, xz compressed)...\" && \
-                        bakta_db download --output /mnt/db --type full"; then
-                echo "Error: Failed to download and setup Bakta database" >&2
+            # Download and install Bakta database v6.0 using the container.
+            # NOTE: bakta_db download (v1.11+) always attempts an internal
+            # amrfinder_update at the end and exits non-zero when that sub-step
+            # fails — even though the 32 GB database itself was downloaded and
+            # extracted correctly. We therefore ignore the exit code and check
+            # for version.json as the true success indicator. This prevents
+            # re-downloading 32 GB simply because amrfinder_update was flaky.
+            # We still retry up to 3 times for genuine download failures.
+            local _bakta_attempt=1
+            while [[ $_bakta_attempt -le 3 ]]; do
+                if [[ -f "$db_dir/$db_name/db/version.json" ]]; then
+                    echo "Bakta database already present (version.json found). Skipping download."
+                    break
+                fi
+                echo "Attempt $_bakta_attempt/3: Downloading Bakta database (full type, xz compressed)..."
+                apptainer exec \
+                    --bind "$db_dir/$db_name":/mnt/db \
+                    "${straincascade_genome_annotation}" \
+                    bash -c "source /opt/conda/etc/profile.d/conda.sh && \
+                            conda activate bakta_env && \
+                            bakta_db download --output /mnt/db --type full" || true
+                if [[ -f "$db_dir/$db_name/db/version.json" ]]; then
+                    break
+                fi
+                if [[ $_bakta_attempt -lt 3 ]]; then
+                    echo "Download did not complete (version.json absent); retrying in 120s..."
+                    sleep 120
+                fi
+                _bakta_attempt=$(( _bakta_attempt + 1 ))
+            done
+
+            if [ ! -f "$db_dir/$db_name/db/version.json" ]; then
+                echo "Error: Bakta database download failed after 3 attempts (version.json not found)." >&2
                 return 1
             fi
+            echo "Bakta database downloaded successfully."
 
             if ! check_apptainer_image_exists "$straincascade_taxonomic_functional_analysis"; then
                 echo "Error: Required Apptainer image (straincascade_taxonomic_functional_analysis) for populating AMRFinderPlus database not found." >&2
@@ -500,12 +831,39 @@ install_individual_database() {
             available_threads=$(( available_threads < 1 ? 1 : available_threads ))
             local threads=$(( available_threads < max_threads ? available_threads : max_threads ))
 
-            if apptainer exec --bind "$db_dir":/data "$straincascade_genome_annotation" \
+            # MicrobeAnnotator's database builder pulls ~150 GB from NCBI FTP and
+            # is the slowest step of the whole installation. Network drops over
+            # 12-24h are common; wrap in retry-with-backoff so a transient
+            # failure doesn't waste the entire run. The builder reuses files
+            # already present on disk, so retries effectively resume.
+
+            # PATCH: InterPro moved its FTP structure (interpro.xml.gz moved to
+            # current_release/ and ftp:// is less robust than https://).
+            # We extract the Python file, patch it, and bind-mount it over the read-only file.
+            local patch_dir="$db_dir/$db_name/patch"
+            mkdir -p "$patch_dir"
+            local py_file="/opt/conda/envs/microbeannotator_env/lib/python3.7/site-packages/microbeannotator/database/conversion_database_creator.py"
+            local patched_py="$patch_dir/conversion_database_creator.py"
+            
+            apptainer exec "$straincascade_genome_annotation" cat "$py_file" | \
+                sed 's|ftp://ftp.ebi.ac.uk/pub/databases/interpro/interpro.xml.gz|https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/interpro.xml.gz|g' > "$patched_py"
+
+            # On success, write a sentinel file so --skip-existing can reliably
+            # distinguish a complete install from a partially-built one
+            # (microbeannotator.db is created mid-build and will exist even after
+            # an OOM kill).
+            if retry_with_backoff 4 600 -- apptainer exec \
+               --bind "$db_dir":/data \
+               --bind "$patched_py":"$py_file" \
+               "$straincascade_genome_annotation" \
                microbeannotator_db_builder -d /data/microbeannotator_db -m blast -t $threads --no_aspera; then
+                touch "$db_dir/$db_name/.straincascade_installed"
                 echo "$db_name database installed successfully in $db_dir/microbeannotator_db"
                 return 0
             else
-                echo "Error occurred during $db_name database installation." >&2
+                echo "Error occurred during $db_name database installation after multiple retries." >&2
+                echo "  See log file under $(sc_install_log_dir) for details." >&2
+                echo "  You can resume by re-running: ./scripts/StrainCascade_installation.sh --databases --yes --skip-existing" >&2
                 return 1
             fi
         ;;
@@ -654,8 +1012,10 @@ install_individual_database() {
                 return 1
             fi
             
-            # Download the trained models
-            if wget --timeout=30 --tries=3 -P "$db_dir/$db_name" "$db_url"; then
+            # Resumable (-c) download with extra retry layer.
+            if retry_with_backoff 3 60 -- wget -c --tries=10 --waitretry=30 \
+                    --read-timeout=60 --timeout=30 \
+                    -P "$db_dir/$db_name" "$db_url"; then
                 archive_file="$db_dir/$db_name/newest_trained_models.tar.gz"
                 if [ -f "$archive_file" ]; then
                     echo "Extracting DeepFri models..."
@@ -740,14 +1100,24 @@ install_all_databases() {
 
     local failed_dbs=""
     local succeeded_dbs=""
+    local skipped_dbs=""
     local fail_count=0
     local success_count=0
+    local skip_count=0
     local total=${#databases[@]}
     local current=0
 
     for db in "${databases[@]}"; do
         current=$((current + 1))
         echo ""
+        # Skip already-installed databases unless --force was supplied.
+        if [ "$SC_FORCE" != "1" ] && [ "$SC_SKIP_EXISTING" = "1" ] \
+           && is_database_installed "$db" "$db_location"; then
+            echo "[$current/$total] Skipping $db (already installed; use --force to reinstall)."
+            skipped_dbs+="$db "
+            skip_count=$((skip_count + 1))
+            continue
+        fi
         echo "[$current/$total] Installing $db..."
         if install_individual_database "$db" "$db_location"; then
             succeeded_dbs+="$db "
@@ -762,8 +1132,13 @@ install_all_databases() {
     echo "=========================================="
     echo "  Database Installation Summary"
     echo "=========================================="
-    echo "  Total: $total | Succeeded: $success_count | Failed: $fail_count"
-    if [[ -n "$failed_dbs" ]]; then echo "  FAILED: $failed_dbs"; fi
+    echo "  Total: $total | Succeeded: $success_count | Skipped: $skip_count | Failed: $fail_count"
+    if [[ -n "$skipped_dbs" ]]; then echo "  Skipped: $skipped_dbs"; fi
+    if [[ -n "$failed_dbs" ]]; then
+        echo "  FAILED: $failed_dbs"
+        echo "  Re-run with --databases --skip-existing to retry only the failed ones,"
+        echo "  or inspect logs at $(sc_install_log_dir)."
+    fi
     echo "=========================================="
 }
 

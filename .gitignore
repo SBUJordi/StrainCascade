@@ -4,3 +4,8 @@ issues/
 .Rhistory
 .RData
 *.sif
+
+# Private developer files — never publish
+.github/workflows/copilot-instructions.md
+dockerfiles/
+scripts/sbatch_install.sh
