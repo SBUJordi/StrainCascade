@@ -107,7 +107,7 @@ Recommended resources (validated on a typical HPC node):
 
 | Resource | Value | Rationale |
 |---|---|---|
-| CPUs | 8 | MicrobeAnnotator parallel downloads; further parallelism gives no speed-up because the bottleneck is remote FTP. |
+| CPUs | 8 | MicrobeAnnotator download threads are capped at 4 (NCBI FTP connection limit); additional cores cover BLAST database build steps. |
 | Memory | 36 GB (min. 25 GB) | Peak measured RSS is ~25 GB (MicrobeAnnotator); 36 GB gives a safe margin. |
 | Disk | ~1 TB | Required for all reference databases and Apptainer images. |
 | Walltime | 48 h | Typical end-to-end runtime is 12–24 h; the extra margin accommodates network fluctuations. |
