@@ -6,7 +6,7 @@ title: "Installation"
 
 - Linux OS (e.g., CentOS, Ubuntu, Debian, etc.)
 - ~1 TB disk space for software, Apptainer images, and reference databases
-- For optimal performance: 32 CPU cores with 3 GB RAM per core (96 GB total). SC16 (*de novo* tree generation) may require >100 GB RAM.
+- 36 GB RAM recommended; 25 GB bare minimum (MicrobeAnnotator database build).
 
 ## Dependencies
 
