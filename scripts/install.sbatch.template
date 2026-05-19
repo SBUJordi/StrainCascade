@@ -9,8 +9,9 @@
 #      cp scripts/install.sbatch.template install.sbatch
 #      sbatch install.sbatch        # run from the StrainCascade root
 #
-#  The installation downloads ~500 GB of databases and takes 12–30 h on a
-#  typical HPC node. It is idempotent: if the job fails or hits the wall
+#  The installation requires ~1 TB of disk space and typically takes 24–48 h
+#  depending on download speed and connection stability. It is idempotent: if
+#  the job fails or hits the wall
 #  time, simply resubmit — already-installed components are skipped.
 #
 #  PBS / LSF / SGE users: translate the #SBATCH header to your scheduler's
@@ -19,8 +20,8 @@
 
 #SBATCH --job-name=StrainCascade_install
 #SBATCH --cpus-per-task=8           # MicrobeAnnotator parallel downloads
-#SBATCH --mem=96G                   # MicrobeAnnotator peak RSS is ~50 GB
-#SBATCH --time=48:00:00             # full install typically 12–30 h
+#SBATCH --mem=36G                   # peak measured RSS ~25 GB; 36 GB gives a safe margin
+#SBATCH --time=48:00:00             # typical runtime 24–48 h depending on download speed
 #SBATCH --nodes=1
 #SBATCH --output=logs/install_%j.out
 #SBATCH --error=logs/install_%j.err

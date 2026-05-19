@@ -10,8 +10,8 @@
 # Define required directories (only scripts must pre-exist; others are created during installation)
 required_dirs=("scripts")
 
-# Define minimum disk space in GB (last measurement: 534G)
-min_disk_space=580
+# Define minimum disk space in GB (~1 TB required for all databases and images)
+min_disk_space=1000
 
 # Default database location
 readonly DEFAULT_DB_LOCATION="../databases"
@@ -978,25 +978,30 @@ install_individual_database() {
             fi
         ;;
         "genomad_db")
-            if ! check_apptainer_image_exists "$straincascade_crisprcas_phage_is_elements"; then
-                echo "Missing Apptainer image" >&2
-                return 1
-            fi
-
             echo "Installing geNomad database..."
             mkdir -p "$db_dir/$db_name"
 
-            # Download geNomad database using the container
-            if apptainer exec \
-                --bind "$db_dir":/mnt \
-                "$straincascade_crisprcas_phage_is_elements" \
-                bash -c "source /opt/conda/etc/profile.d/conda.sh && \
-                         conda activate genomad_env && \
-                         cd /mnt && \
-                         genomad download-database ."; then
+            # Download the pre-built database archive directly. The 'genomad
+            # download-database' Python command provides no timeout and has been
+            # observed to stall indefinitely on NERSC connections. wget -c is
+            # resumable and will retry on any read timeout (no data for 5 min).
+            local genomad_url="https://portal.nersc.gov/genomad/__data__/genomad_db_v1.9.tar.gz"
+            local archive="$db_dir/genomad_db_v1.9.tar.gz"
+
+            if ! command -v wget &>/dev/null; then
+                echo "wget is required but not installed." >&2
+                return 1
+            fi
+
+            if retry_with_backoff 3 60 -- wget -c --tries=10 --waitretry=30 \
+                    --read-timeout=300 --timeout=60 \
+                    -O "$archive" "$genomad_url" \
+               && tar -xzf "$archive" -C "$db_dir"; then
+                rm -f "$archive"
                 echo "geNomad database installed successfully in $db_dir/genomad_db"
                 return 0
             else
+                rm -f "$archive"
                 echo "Error occurred during $db_name database installation." >&2
                 return 1
             fi
