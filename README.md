@@ -55,3 +55,9 @@ Execute the installation script, which pulls Apptainer images and downloads data
 ```
 
 For all installation options (custom installation, resuming a failed installation, verbosity, advanced multi-install setup with Conda) see the [installation documentation](https://sbujordi.github.io/StrainCascade/docs/installation.html).
+
+## Citation
+
+If you use StrainCascade in your research, please cite:
+
+> Jordi SBU et al. StrainCascade: An automated, modular workflow for high-throughput long-read bacterial genome reconstruction and characterization. *iScience* 2026; 29:116189. https://doi.org/10.1016/j.isci.2026.116189
