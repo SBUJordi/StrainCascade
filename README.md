@@ -8,7 +8,7 @@ StrainCascade is a modular bioinformatics pipeline designed to comprehensively p
 
 -   Linux OS (e.g., CentOS, Ubuntu, Debian, etc.)
 
--   \~ 590GB disk space for software and reference databases
+-   \~ 1 TB disk space for software, Apptainer images, and reference databases
 
 -   For optimal performance, we recommend running StrainCascade with 32 CPU cores, with 3GB of RAM allocated per core (= total of 96GB of RAM). If you run SC16 for *de novo* tree generation more than 100GB of RAM might be required.
 
